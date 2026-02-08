@@ -1,0 +1,130 @@
+services:
+  # ===========================================================================
+  # OLLAMA - Local LLM Server
+  # ===========================================================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: sovereign-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_ORIGINS=*
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:11434/api/tags" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ===========================================================================
+  # OLLAMA MODEL LOADER - Pulls required models on startup
+  # ===========================================================================
+  ollama-loader:
+    image: ollama/ollama:latest
+    container_name: sovereign-ollama-loader
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    entrypoint: [ "/bin/sh", "-c" ]
+    command:
+      - |
+        echo "🔄 Pulling Llama 3.3 model..."
+        ollama pull llama3.3
+        echo "🔄 Pulling BGE-M3 embedding model..."
+        ollama pull bge-m3
+        echo "✅ All models loaded successfully!"
+    restart: "no"
+
+  # ===========================================================================
+  # CHROMADB - Vector Database
+  # ===========================================================================
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: sovereign-chromadb
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+      - CHROMA_SERVER_AUTH_PROVIDER=
+      - CHROMA_SERVER_AUTH_CREDENTIALS=
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ===========================================================================
+  # MCP SERVER - Model Context Protocol API
+  # ===========================================================================
+  mcp-server:
+    build:
+      context: ./mcp_server
+      dockerfile: Dockerfile
+    container_name: sovereign-mcp-server
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./:/workspace:ro # Read-only access to repo
+      - /var/run/docker.sock:/var/run/docker.sock # For container introspection
+    environment:
+      - WORKSPACE_PATH=/workspace
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - ollama
+      - chromadb
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ===========================================================================
+  # BACKEND API - FastAPI Application
+  # ===========================================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sovereign-backend
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./:/workspace
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - CHROMA_HOST=http://chromadb:8000
+      - MCP_SERVER_HOST=http://mcp-server:8080
+      - WORKSPACE_PATH=/workspace
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - .env
+    depends_on:
+      - ollama
+      - chromadb
+      - mcp-server
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8001/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  ollama_data:
+    driver: local
+  chroma_data:
+    driver: local
+
+networks:
+  default:
+    name: sovereign-network

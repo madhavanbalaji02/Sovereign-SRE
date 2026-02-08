@@ -1,0 +1,231 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================================
+   SOVEREIGN-SRE CYBERPUNK THEME
+   ============================================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Orbitron:wght@400;500;600;700;800;900&display=swap');
+
+:root {
+  --cyber-black: #0a0a0f;
+  --cyber-dark: #0f0f1a;
+  --cyber-darker: #1a1a2e;
+  --cyber-primary: #00ffff;
+  --cyber-secondary: #ff00ff;
+  --cyber-accent: #ffff00;
+  --cyber-success: #00ff88;
+  --cyber-warning: #ffaa00;
+  --cyber-error: #ff3366;
+  --cyber-muted: #4a4a6a;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  min-height: 100vh;
+  background-color: var(--cyber-black);
+  color: #e0e0e0;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Scanline effect overlay */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.1) 0px,
+    rgba(0, 0, 0, 0.1) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+  z-index: 9999;
+  opacity: 0.3;
+}
+
+/* Grid background pattern */
+body::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  background-image: 
+    linear-gradient(rgba(0, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+  z-index: -1;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--cyber-dark);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--cyber-primary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--cyber-secondary);
+}
+
+/* Glow effects */
+.glow-cyan {
+  box-shadow: 0 0 10px var(--cyber-primary), 0 0 20px var(--cyber-primary);
+}
+
+.glow-magenta {
+  box-shadow: 0 0 10px var(--cyber-secondary), 0 0 20px var(--cyber-secondary);
+}
+
+.glow-green {
+  box-shadow: 0 0 10px var(--cyber-success), 0 0 20px var(--cyber-success);
+}
+
+.text-glow-cyan {
+  text-shadow: 0 0 10px var(--cyber-primary), 0 0 20px var(--cyber-primary);
+}
+
+.text-glow-magenta {
+  text-shadow: 0 0 10px var(--cyber-secondary), 0 0 20px var(--cyber-secondary);
+}
+
+/* Terminal-style text */
+.terminal-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+/* Animated border */
+.border-animated {
+  position: relative;
+  overflow: hidden;
+}
+
+.border-animated::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--cyber-primary), transparent);
+  animation: borderMove 3s linear infinite;
+}
+
+@keyframes borderMove {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+
+/* Pulse ring animation */
+.pulse-ring {
+  animation: pulseRing 2s ease-out infinite;
+}
+
+@keyframes pulseRing {
+  0% {
+    transform: scale(0.8);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+/* Status indicator */
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-dot.active {
+  background-color: var(--cyber-success);
+  box-shadow: 0 0 10px var(--cyber-success);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.status-dot.warning {
+  background-color: var(--cyber-warning);
+  box-shadow: 0 0 10px var(--cyber-warning);
+}
+
+.status-dot.error {
+  background-color: var(--cyber-error);
+  box-shadow: 0 0 10px var(--cyber-error);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Card styles */
+.cyber-card {
+  background: linear-gradient(145deg, rgba(26, 26, 46, 0.8), rgba(15, 15, 26, 0.9));
+  border: 1px solid rgba(0, 255, 255, 0.2);
+  border-radius: 8px;
+  backdrop-filter: blur(10px);
+}
+
+.cyber-card:hover {
+  border-color: rgba(0, 255, 255, 0.5);
+  box-shadow: 0 0 20px rgba(0, 255, 255, 0.1);
+}
+
+/* Button styles */
+.cyber-button {
+  background: linear-gradient(145deg, var(--cyber-darker), var(--cyber-dark));
+  border: 1px solid var(--cyber-primary);
+  color: var(--cyber-primary);
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-family: 'Orbitron', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.cyber-button:hover {
+  background: var(--cyber-primary);
+  color: var(--cyber-black);
+  box-shadow: 0 0 20px var(--cyber-primary);
+}
+
+.cyber-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Layer utility */
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
