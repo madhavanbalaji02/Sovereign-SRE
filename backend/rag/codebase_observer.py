@@ -113,8 +113,12 @@ class CodebaseObserver:
         else:
             port = 8000
         
-        self.chroma_client = chromadb.HttpClient(host=host, port=port)
-        
+        # Use in-memory client on HF Spaces (CHROMA_MODE=ephemeral), HTTP otherwise
+        if os.environ.get("CHROMA_MODE") == "ephemeral":
+            self.chroma_client = chromadb.EphemeralClient()
+        else:
+            self.chroma_client = chromadb.HttpClient(host=host, port=port)
+
         # Get or create collection
         self.collection = self.chroma_client.get_or_create_collection(
             name=self.collection_name,

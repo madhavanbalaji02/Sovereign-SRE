@@ -64,15 +64,18 @@ def create_query_engine(
     embed = HuggingFaceEmbedding(model_name=embed_model)
     Settings.embed_model = embed
     
-    # Connect to ChromaDB
-    host = chroma_host.replace("http://", "").replace("https://", "")
-    if ":" in host:
-        host, port = host.split(":")
-        port = int(port)
+    # Connect to ChromaDB — ephemeral (in-memory) for HF Spaces demo, HTTP otherwise
+    if os.environ.get("CHROMA_MODE") == "ephemeral":
+        chroma_client = chromadb.EphemeralClient()
     else:
-        port = 8000
-    
-    chroma_client = chromadb.HttpClient(host=host, port=port)
+        host = chroma_host.replace("http://", "").replace("https://", "")
+        if ":" in host:
+            host, port = host.split(":")
+            port = int(port)
+        else:
+            port = 8000
+        chroma_client = chromadb.HttpClient(host=host, port=port)
+
     collection = chroma_client.get_or_create_collection(name=collection_name)
     vector_store = ChromaVectorStore(chroma_collection=collection)
     
