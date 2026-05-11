@@ -20,7 +20,7 @@ IGNORE_DIRS = {
     ".git", "__pycache__", "node_modules", ".next", "venv", ".venv",
     "env", ".env", "dist", "build", ".pytest_cache", ".mypy_cache",
     ".ruff_cache", "eggs", "*.egg-info", ".tox", "htmlcov", ".coverage",
-    "chroma_data", "ollama_data"
+    "chroma_data"
 }
 
 # Files to always ignore

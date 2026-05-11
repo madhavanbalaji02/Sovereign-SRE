@@ -9,6 +9,7 @@ from typing import Optional
 
 from crewai import Agent, Task, Crew, Process
 from crewai.tools import tool
+from langchain_groq import ChatGroq
 
 from backend.rag.query_engine import query_codebase, create_query_engine
 
@@ -16,8 +17,16 @@ from backend.rag.query_engine import query_codebase, create_query_engine
 # CONFIGURATION
 # =============================================================================
 
-OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
-LLM_MODEL = os.environ.get("OLLAMA_LLM_MODEL", "llama3.3")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+
+
+def _get_llm() -> ChatGroq:
+    return ChatGroq(
+        model=GROQ_MODEL,
+        api_key=GROQ_API_KEY,
+        temperature=0.1,
+    )
 
 
 # =============================================================================
@@ -69,7 +78,7 @@ def create_senior_sre_agent() -> Agent:
         communicate clearly and prioritize solutions by impact and urgency.""",
         verbose=True,
         allow_delegation=True,
-        llm=f"ollama/{LLM_MODEL}",
+        llm=_get_llm(),
     )
 
 
@@ -88,7 +97,7 @@ def create_system_researcher_agent() -> Agent:
         verbose=True,
         allow_delegation=False,
         tools=[codebase_query_tool],
-        llm=f"ollama/{LLM_MODEL}",
+        llm=_get_llm(),
     )
 
 

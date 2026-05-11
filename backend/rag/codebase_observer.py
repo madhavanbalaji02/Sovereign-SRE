@@ -13,7 +13,7 @@ from datetime import datetime
 from llama_index.core import Document, VectorStoreIndex, Settings
 from llama_index.core.node_parser import CodeSplitter
 from llama_index.core.schema import TextNode
-from llama_index.embeddings.ollama import OllamaEmbedding
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.vector_stores.chroma import ChromaVectorStore
 import chromadb
 
@@ -22,9 +22,8 @@ import chromadb
 # =============================================================================
 
 WORKSPACE_PATH = os.environ.get("WORKSPACE_PATH", "/workspace")
-OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 CHROMA_HOST = os.environ.get("CHROMA_HOST", "http://localhost:8000")
-EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "bge-m3")
+EMBED_MODEL = os.environ.get("EMBED_MODEL", "BAAI/bge-m3")
 COLLECTION_NAME = os.environ.get("CHROMA_COLLECTION_NAME", "sovereign_sre_codebase")
 
 # File extensions to index
@@ -63,7 +62,7 @@ CODE_EXTENSIONS = {
 IGNORE_DIRS = {
     ".git", "__pycache__", "node_modules", ".next", "venv", ".venv",
     "env", ".env", "dist", "build", ".pytest_cache", ".mypy_cache",
-    ".ruff_cache", "eggs", "chroma_data", "ollama_data", ".tox",
+    ".ruff_cache", "eggs", "chroma_data", ".tox",
     "htmlcov", "coverage", ".idea", ".vscode"
 }
 
@@ -78,34 +77,29 @@ IGNORE_FILES = {".DS_Store", "Thumbs.db", ".gitignore", ".env", ".env.example"}
 class CodebaseObserver:
     """
     Recursively scans a codebase and indexes it in ChromaDB for RAG queries.
-    
-    Uses BGE-M3 embeddings via Ollama and CodeSplitter for intelligent chunking.
+
+    Uses BGE-M3 embeddings (local HuggingFace) and CodeSplitter for intelligent chunking.
     """
-    
+
     def __init__(
         self,
         workspace_path: Optional[str] = None,
         collection_name: str = COLLECTION_NAME,
-        ollama_host: str = OLLAMA_HOST,
         chroma_host: str = CHROMA_HOST,
         embed_model: str = EMBED_MODEL,
     ):
         self.workspace_path = Path(workspace_path or WORKSPACE_PATH)
         self.collection_name = collection_name
-        self.ollama_host = ollama_host
         self.chroma_host = chroma_host
         self.embed_model = embed_model
-        
+
         # Initialize components
         self._setup_embedding()
         self._setup_vector_store()
-        
+
     def _setup_embedding(self):
-        """Configure the embedding model"""
-        self.embed_model_instance = OllamaEmbedding(
-            model_name=self.embed_model,
-            base_url=self.ollama_host,
-        )
+        """Configure the embedding model (runs locally via HuggingFace)"""
+        self.embed_model_instance = HuggingFaceEmbedding(model_name=self.embed_model)
         # Set as global default
         Settings.embed_model = self.embed_model_instance
         

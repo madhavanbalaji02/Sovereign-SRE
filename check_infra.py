@@ -35,12 +35,10 @@ except ImportError:
 USE_LOCAL = "--local" in sys.argv or os.environ.get("USE_LOCAL", "false").lower() == "true"
 
 if USE_LOCAL:
-    OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
     CHROMA_HOST = os.environ.get("CHROMA_HOST", "http://localhost:8000")
     MCP_HOST = os.environ.get("MCP_SERVER_HOST", "http://localhost:8080")
     BACKEND_HOST = os.environ.get("BACKEND_HOST", "http://localhost:8001")
 else:
-    OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://ollama:11434")
     CHROMA_HOST = os.environ.get("CHROMA_HOST", "http://chromadb:8000")
     MCP_HOST = os.environ.get("MCP_SERVER_HOST", "http://mcp-server:8080")
     BACKEND_HOST = os.environ.get("BACKEND_HOST", "http://backend:8001")
@@ -51,24 +49,18 @@ console = Console()
 # SERVICE CHECKS
 # =============================================================================
 
-async def check_ollama(client: httpx.AsyncClient) -> dict:
-    """Check Ollama API and list models"""
-    try:
-        # Check tags endpoint
-        response = await client.get(f"{OLLAMA_HOST}/api/tags", timeout=10.0)
-        response.raise_for_status()
-        data = response.json()
-        models = [m.get("name", "unknown") for m in data.get("models", [])]
-        
-        return {
-            "status": "✅ Healthy",
-            "models": models if models else ["No models loaded"],
-            "details": f"{len(models)} model(s) available"
-        }
-    except httpx.ConnectError:
-        return {"status": "❌ Connection Failed", "models": [], "details": "Cannot connect to Ollama"}
-    except Exception as e:
-        return {"status": "⚠️ Error", "models": [], "details": str(e)}
+async def check_groq_api() -> dict:
+    """Check Groq API key is configured"""
+    api_key = os.environ.get("GROQ_API_KEY")
+    model = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+    if not api_key:
+        return {"status": "❌ Not Configured", "details": "GROQ_API_KEY not set in .env"}
+    if api_key == "your_groq_api_key_here":
+        return {"status": "⚠️ Placeholder", "details": "Replace GROQ_API_KEY in .env with a real key"}
+    return {
+        "status": "✅ Configured",
+        "details": f"{model} (key ends ...{api_key[-4:]})"
+    }
 
 
 async def check_chromadb(client: httpx.AsyncClient) -> dict:
@@ -155,50 +147,41 @@ async def run_checks():
             console=console
         ) as progress:
             task = progress.add_task("Checking services...", total=4)
-            
+
             # Run checks
-            progress.update(task, description="Checking Ollama...")
-            ollama = await check_ollama(client)
+            progress.update(task, description="Checking Groq API key...")
+            grok = await check_groq_api()
             progress.advance(task)
-            
+
             progress.update(task, description="Checking ChromaDB...")
             chroma = await check_chromadb(client)
             progress.advance(task)
-            
+
             progress.update(task, description="Checking MCP Server...")
             mcp = await check_mcp_server(client)
             progress.advance(task)
-            
+
             progress.update(task, description="Checking Backend...")
             backend = await check_backend(client)
             progress.advance(task)
-    
+
     # Display results
     console.print()
-    
+
     # Services Table
     table = Table(title="Service Status", show_header=True, header_style="bold magenta")
     table.add_column("Service", style="cyan")
     table.add_column("Status")
     table.add_column("Details", style="dim")
-    
-    table.add_row("Ollama", ollama["status"], ollama.get("details", ""))
+
+    table.add_row("Groq API", grok["status"], grok.get("details", ""))
     table.add_row("ChromaDB", chroma["status"], chroma.get("details", ""))
     table.add_row("MCP Server", mcp["status"], mcp.get("details", ""))
     table.add_row("Backend", backend["status"], backend.get("details", ""))
-    
+
     console.print(table)
     console.print()
-    
-    # Models Table
-    if ollama.get("models"):
-        models_table = Table(title="Ollama Models", show_header=True, header_style="bold green")
-        models_table.add_column("Model Name", style="cyan")
-        for model in ollama["models"]:
-            models_table.add_row(model)
-        console.print(models_table)
-        console.print()
-    
+
     # MCP Tools Table
     if mcp.get("tools"):
         tools_table = Table(title="MCP Tools", show_header=True, header_style="bold blue")
@@ -207,10 +190,10 @@ async def run_checks():
             tools_table.add_row(tool)
         console.print(tools_table)
         console.print()
-    
+
     # Summary
     all_healthy = all([
-        "✅" in ollama["status"],
+        "✅" in grok["status"],
         "✅" in chroma["status"],
         "✅" in mcp["status"],
         "✅" in backend["status"]

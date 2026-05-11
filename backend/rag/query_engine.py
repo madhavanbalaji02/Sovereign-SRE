@@ -11,8 +11,8 @@ from llama_index.core import VectorStoreIndex, Settings
 from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.core.retrievers import VectorIndexRetriever
 from llama_index.core.postprocessor import SimilarityPostprocessor
-from llama_index.llms.ollama import Ollama
-from llama_index.embeddings.ollama import OllamaEmbedding
+from llama_index.llms.groq import Groq as LlamaGroq
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.vector_stores.chroma import ChromaVectorStore
 import chromadb
 
@@ -20,10 +20,10 @@ import chromadb
 # CONFIGURATION
 # =============================================================================
 
-OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 CHROMA_HOST = os.environ.get("CHROMA_HOST", "http://localhost:8000")
-LLM_MODEL = os.environ.get("OLLAMA_LLM_MODEL", "llama3.3")
-EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "bge-m3")
+LLM_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+EMBED_MODEL = os.environ.get("EMBED_MODEL", "BAAI/bge-m3")
 COLLECTION_NAME = os.environ.get("CHROMA_COLLECTION_NAME", "sovereign_sre_codebase")
 
 
@@ -33,7 +33,6 @@ COLLECTION_NAME = os.environ.get("CHROMA_COLLECTION_NAME", "sovereign_sre_codeba
 
 def create_query_engine(
     collection_name: str = COLLECTION_NAME,
-    ollama_host: str = OLLAMA_HOST,
     chroma_host: str = CHROMA_HOST,
     llm_model: str = LLM_MODEL,
     embed_model: str = EMBED_MODEL,
@@ -42,32 +41,27 @@ def create_query_engine(
 ) -> RetrieverQueryEngine:
     """
     Create a query engine for the codebase.
-    
+
     Args:
         collection_name: ChromaDB collection name
-        ollama_host: Ollama API URL
         chroma_host: ChromaDB API URL
-        llm_model: LLM model for response generation
-        embed_model: Embedding model name
+        llm_model: Grok model name for response generation
+        embed_model: HuggingFace embedding model name
         similarity_top_k: Number of similar chunks to retrieve
         similarity_cutoff: Minimum similarity score
-        
+
     Returns:
         Configured query engine
     """
-    # Configure LLM
-    llm = Ollama(
+    # Configure LLM (Groq cloud — Llama 3.3 on LPU)
+    llm = LlamaGroq(
         model=llm_model,
-        base_url=ollama_host,
-        request_timeout=120.0,
+        api_key=GROQ_API_KEY,
     )
     Settings.llm = llm
-    
-    # Configure embeddings
-    embed = OllamaEmbedding(
-        model_name=embed_model,
-        base_url=ollama_host,
-    )
+
+    # Configure embeddings (local HuggingFace, no API key needed)
+    embed = HuggingFaceEmbedding(model_name=embed_model)
     Settings.embed_model = embed
     
     # Connect to ChromaDB

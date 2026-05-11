@@ -160,7 +160,7 @@ async def get_pending():
 async def query_codebase(request: QueryRequest):
     """Simulate RAG query"""
     return {
-        "response": f"Based on the codebase analysis, here's the answer to: '{request.query}'...\n\n(RAG requires Ollama + ChromaDB to be running for real responses)",
+        "response": f"Based on the codebase analysis, here's the answer to: '{request.query}'...\n\n(RAG requires ChromaDB + indexed codebase for real responses)",
         "sources": [
             {"file_path": "backend/api/main.py", "language": "python", "score": 0.85}
         ],

@@ -23,9 +23,9 @@
 
 - 🧠 **Multi-Agent AI** (LangGraph + CrewAI)
 - 📚 **Codebase-Aware RAG** (LlamaIndex + ChromaDB)
-- 🤖 **Local LLMs** (Ollama with Llama 3.3)
+- ⚡ **Cloud LLMs** (Groq — Llama 3.3 on LPU hardware, free tier available)
 - 🔧 **Model Context Protocol** (MCP) for tool execution
-- ⚡ **Human-in-the-Loop Approval Gates**
+- 🛑 **Human-in-the-Loop Approval Gates**
 
 The result? A system that automatically detects infrastructure issues, analyzes root causes using AI agents that understand your codebase, generates fixes, and submits pull requests — all while keeping humans in control of critical decisions.
 
@@ -39,9 +39,9 @@ The result? A system that automatically detects infrastructure issues, analyzes 
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
 │  ┌──────────────┐     ┌──────────────┐     ┌──────────────┐            │
-│  │   Ollama     │     │   ChromaDB   │     │  MCP Server  │            │
-│  │ Llama 3.3    │     │Vector Store  │     │   Tools      │            │
-│  │   BGE-M3     │     │              │     │              │            │
+│  │  Groq API   │     │   ChromaDB   │     │  MCP Server  │            │
+│  │ Llama 3.3   │     │Vector Store  │     │   Tools      │            │
+│  │  BGE-M3 emb  │     │              │     │              │            │
 │  └──────┬───────┘     └──────┬───────┘     └──────┬───────┘            │
 │         │                    │                    │                     │
 │         └────────────────────┼────────────────────┘                     │
@@ -87,7 +87,7 @@ The result? A system that automatically detects infrastructure issues, analyzes 
 - Confidence scoring for proposed diagnoses
 
 ### 📚 Codebase-Aware RAG
-- **LlamaIndex** pipeline with **BGE-M3** embeddings
+- **LlamaIndex** pipeline with **BGE-M3** embeddings (local, via HuggingFace)
 - Language-aware code chunking (Python, TypeScript, Go, etc.)
 - ChromaDB vector storage for semantic search
 - Query your entire codebase: *"How is error handling implemented in the API?"*
@@ -135,11 +135,8 @@ nano .env
 ### 2. Start Infrastructure
 
 ```bash
-# Start all services (Ollama, ChromaDB, MCP Server, Backend)
+# Start all services (ChromaDB, MCP Server, Backend)
 docker-compose up -d
-
-# Wait for Ollama to pull models (first run takes ~5-10 min)
-docker-compose logs -f ollama-loader
 ```
 
 ### 3. Verify Infrastructure
@@ -155,14 +152,14 @@ python check_infra.py --local
 Expected output:
 ```
 ✅ All systems operational!
-┌─────────────┬──────────┬───────────────────┐
-│ Service     │ Status   │ Details           │
-├─────────────┼──────────┼───────────────────┤
-│ Ollama      │ ✅ Active │ 2 model(s)        │
-│ ChromaDB    │ ✅ Active │ 0 collection(s)   │
-│ MCP Server  │ ✅ Active │ 2 tool(s)         │
-│ Backend     │ ✅ Active │ healthy           │
-└─────────────┴──────────┴───────────────────┘
+┌────────────────┬──────────┬──────────────────────────┐
+│ Service        │ Status   │ Details                  │
+├────────────────┼──────────┼──────────────────────────┤
+│ Grok API (xAI) │ ✅ Active │ Key set (ends ...xxxx)   │
+│ ChromaDB       │ ✅ Active │ 0 collection(s)          │
+│ MCP Server     │ ✅ Active │ 2 tool(s)                │
+│ Backend        │ ✅ Active │ healthy                  │
+└────────────────┴──────────┴──────────────────────────┘
 ```
 
 ### 4. Index Your Codebase
@@ -244,13 +241,47 @@ Sovereign-SRE/
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `GEMINI_API_KEY` | Google Gemini API key | - |
-| `ANTHROPIC_API_KEY` | Anthropic Claude API key | - |
+| `LLM_PROVIDER` | Active LLM backend (`groq`, `grok`, or `claude`) | `groq` |
+| `GROQ_API_KEY` | Groq API key — get one free at console.groq.com | - |
+| `GROQ_MODEL` | Groq model name | `llama-3.3-70b-versatile` |
+| `ANTHROPIC_API_KEY` | Anthropic Claude API key (if `LLM_PROVIDER=claude`) | - |
+| `CLAUDE_MODEL` | Claude model name | `claude-sonnet-4-6` |
 | `GITHUB_TOKEN` | GitHub PAT for PR creation | - |
-| `OLLAMA_HOST` | Ollama API URL | `http://ollama:11434` |
 | `CHROMA_HOST` | ChromaDB URL | `http://chromadb:8000` |
-| `OLLAMA_LLM_MODEL` | LLM model name | `llama3.3` |
-| `OLLAMA_EMBED_MODEL` | Embedding model | `bge-m3` |
+| `EMBED_MODEL` | HuggingFace embedding model | `BAAI/bge-m3` |
+
+---
+
+## 🤖 LLM Providers
+
+Sovereign-SRE supports multiple LLM backends, switchable via a single env variable:
+
+```bash
+# Groq (default — Llama 3.3 on LPU hardware, free tier available)
+LLM_PROVIDER=groq
+GROQ_MODEL=llama-3.3-70b-versatile   # best quality for RCA + patch gen
+# GROQ_MODEL=llama-3.1-8b-instant    # fastest / cheapest for classification
+# GROQ_MODEL=mixtral-8x7b-32768      # long context (32K window)
+GROQ_API_KEY=your_key_here           # get free at https://console.groq.com
+
+# xAI Grok (alternative cloud option)
+LLM_PROVIDER=grok
+XAI_API_KEY=your_key_here            # get at https://console.x.ai
+
+# Anthropic Claude (best reasoning quality)
+LLM_PROVIDER=claude
+CLAUDE_MODEL=claude-sonnet-4-6
+ANTHROPIC_API_KEY=your_key_here
+```
+
+Embeddings always run **locally** via HuggingFace (`BAAI/bge-m3`) — no embedding API key needed.
+
+### Getting Started
+
+1. Get a free Groq API key at [console.groq.com](https://console.groq.com)
+2. Copy `.env.example` to `.env` and set `GROQ_API_KEY`
+3. `docker compose up --build`
+4. Visit http://localhost:3000
 
 ---
 
