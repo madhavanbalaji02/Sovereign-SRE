@@ -6,12 +6,13 @@
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![Next.js](https://img.shields.io/badge/Next.js-15-black?style=for-the-badge&logo=next.js&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+[![HuggingFace Spaces](https://img.shields.io/badge/🤗%20HuggingFace-Spaces-orange?style=for-the-badge)](https://madhavan02-sovereign-sre.hf.space)
 
 **An Autonomous Self-Healing Infrastructure System**
 
 *Detect → Diagnose → Fix → Deploy — All Without Human Intervention*
 
-[Demo](#demo) • [Architecture](#architecture) • [Quick Start](#quick-start) • [Features](#features)
+[Live Demo](https://madhavan02-sovereign-sre.hf.space) • [Architecture](#architecture) • [Quick Start](#quick-start) • [Features](#features) • [Deploy to HF Spaces](#deploy-to-huggingface-spaces)
 
 </div>
 
@@ -155,7 +156,7 @@ Expected output:
 ┌────────────────┬──────────┬──────────────────────────┐
 │ Service        │ Status   │ Details                  │
 ├────────────────┼──────────┼──────────────────────────┤
-│ Grok API (xAI) │ ✅ Active │ Key set (ends ...xxxx)   │
+│ Groq API       │ ✅ Active │ Key set (ends ...xxxx)   │
 │ ChromaDB       │ ✅ Active │ 0 collection(s)          │
 │ MCP Server     │ ✅ Active │ 2 tool(s)                │
 │ Backend        │ ✅ Active │ healthy                  │
@@ -226,6 +227,11 @@ Sovereign-SRE/
 ├── mcp_server/                 # MCP tool server
 │   ├── main.py
 │   └── tools/
+├── hf_deploy/                  # HuggingFace Spaces deployment
+│   ├── Dockerfile             # Single-container build (supervisord)
+│   ├── supervisord.conf       # Process manager config
+│   ├── README.md              # HF Spaces YAML header + docs
+│   └── DEPLOY_STEPS.md        # Step-by-step deploy guide
 ├── tests/
 │   └── stress_test.py         # Production stress test
 ├── docker-compose.yml
@@ -282,6 +288,58 @@ Embeddings always run **locally** via HuggingFace (`BAAI/bge-m3`) — no embeddi
 2. Copy `.env.example` to `.env` and set `GROQ_API_KEY`
 3. `docker compose up --build`
 4. Visit http://localhost:3000
+
+---
+
+## 🤗 Deploy to HuggingFace Spaces
+
+Run Sovereign-SRE as a public demo with zero server costs. The `hf_deploy/` folder contains a single-container setup managed by **supervisord** — ChromaDB, the MCP server, and the FastAPI backend all run on port 7860.
+
+**Live demo:** https://madhavan02-sovereign-sre.hf.space
+
+### Quick deploy
+
+```bash
+# 1. Create a new Docker Space at huggingface.co/spaces/new
+# 2. Add GROQ_API_KEY as a Space secret (Settings → Variables and secrets)
+
+# 3. Clone your Space and copy the project files
+git clone https://huggingface.co/spaces/YOUR_USERNAME/sovereign-sre
+cp -r backend/ mcp_server/ sovereign-sre/
+cp hf_deploy/Dockerfile hf_deploy/supervisord.conf hf_deploy/README.md sovereign-sre/
+
+# 4. Push — first build takes ~5–8 min
+cd sovereign-sre && git add . && git commit -m "deploy" && git push
+```
+
+See [`hf_deploy/DEPLOY_STEPS.md`](hf_deploy/DEPLOY_STEPS.md) for the full guide.
+
+### HF Spaces architecture
+
+```
+Port 7860 (public)
+    └── FastAPI backend (Sovereign SRE)
+            ├── localhost:8000 → ChromaDB (ephemeral in-memory)
+            └── localhost:8081 → MCP Server (tool execution)
+```
+
+> ChromaDB runs in ephemeral mode on HF Spaces — vector data resets on container restart.  
+> All writable paths are routed to `/tmp` for HF Spaces compatibility.
+
+### Test your deployment
+
+```bash
+curl -X POST https://YOUR_USERNAME-sovereign-sre.hf.space/api/agents/run \
+  -H "Content-Type: application/json" \
+  -d '{
+    "logs": [{
+      "level": "ERROR",
+      "message": "OOMKilled on pod payments-service. Memory limit 512Mi exceeded.",
+      "timestamp": "2026-05-11T07:00:00Z"
+    }],
+    "auto_approve": false
+  }'
+```
 
 ---
 
