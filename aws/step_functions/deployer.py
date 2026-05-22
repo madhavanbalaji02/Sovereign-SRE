@@ -59,7 +59,6 @@ class StateMachineDeployer:
                 definition=definition,
                 roleArn=role_arn,
                 type="STANDARD",
-                loggingConfiguration={"level": "ERROR", "includeExecutionData": False},
             )
             return resp["stateMachineArn"]
 

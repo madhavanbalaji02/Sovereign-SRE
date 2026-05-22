@@ -33,6 +33,9 @@ import time
 import zipfile
 from pathlib import Path
 
+# Ensure the project root is on sys.path so `aws.*` imports work
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import boto3
 from botocore.exceptions import ClientError
 from dotenv import load_dotenv
@@ -361,10 +364,17 @@ def create_firehose(role_arn: str):
             },
         )
         _ok(f"Created Firehose stream: {FIREHOSE_STREAM}")
+        results["Firehose Stream"] = FIREHOSE_STREAM
     except fh.exceptions.ResourceInUseException:
         _skip(FIREHOSE_STREAM)
-
-    results["Firehose Stream"] = FIREHOSE_STREAM
+        results["Firehose Stream"] = FIREHOSE_STREAM
+    except ClientError as e:
+        if "SubscriptionRequiredException" in str(e):
+            console.print(f"  [yellow]⚠ Firehose skipped — account not subscribed to Kinesis.[/]")
+            console.print(f"  [dim]  Pipeline will use CloudWatch Logs as log source instead.[/]")
+            results["Firehose Stream"] = "skipped (not subscribed)"
+        else:
+            raise
 
 
 # ---------------------------------------------------------------------------
@@ -397,8 +407,14 @@ def create_rds_instance():
         _ok(f"Endpoint (may still be pending): {endpoint}")
     except rds.exceptions.DBInstanceAlreadyExistsFault:
         resp = rds.describe_db_instances(DBInstanceIdentifier=RDS_INSTANCE_ID)
-        endpoint = resp["DBInstances"][0]["Endpoint"]["Address"]
-        _skip(f"RDS endpoint: {endpoint}")
+        db = resp["DBInstances"][0]
+        status = db.get("DBInstanceStatus", "unknown")
+        if "Endpoint" in db:
+            endpoint = db["Endpoint"]["Address"]
+            _skip(f"RDS endpoint: {endpoint}")
+        else:
+            endpoint = "pending"
+            _skip(f"RDS exists but still provisioning (status: {status}). Endpoint not ready yet.")
 
     # Store connection string in SSM
     ssm = boto3.client("ssm", region_name=REGION)
@@ -474,7 +490,14 @@ def create_lambda(role_arn: str, sns_topic_arn: str, sm_arn: str = "") -> str:
         lambda_arn = resp["FunctionArn"]
         _ok(f"Created Lambda: {lambda_arn}")
     except lam.exceptions.ResourceConflictException:
+        # Wait for any in-progress update to finish (up to 60s)
+        for _ in range(12):
+            state = lam.get_function_configuration(FunctionName=LAMBDA_NAME)
+            if state.get("LastUpdateStatus") != "InProgress":
+                break
+            time.sleep(5)
         lam.update_function_code(FunctionName=LAMBDA_NAME, ZipFile=zip_bytes)
+        time.sleep(3)
         lam.update_function_configuration(
             FunctionName=LAMBDA_NAME,
             Environment={"Variables": env_vars},
@@ -497,7 +520,10 @@ def create_step_functions(role_arn: str, sns_topic_arn: str) -> str:
     from aws.step_functions.deployer import StateMachineDeployer
 
     deployer = StateMachineDeployer(region=REGION)
-    sm_arn = deployer.deploy(role_arn=role_arn)
+    sm_arn = deployer.deploy(
+        role_arn=role_arn,
+        replacements={"PLACEHOLDER_SNS_TOPIC_ARN": sns_topic_arn},
+    )
     _ok(f"State machine ARN: {sm_arn}")
     results["Step Functions"] = sm_arn
     return sm_arn
@@ -568,8 +594,13 @@ if __name__ == "__main__":
         lambda_arn = create_lambda(role_arn, sns_topic_arn, sm_arn="")
         sm_arn = create_step_functions(role_arn, sns_topic_arn)
 
-        # Update Lambda with real SM ARN
+        # Update Lambda with real SM ARN — wait for any in-progress update first
         lam = boto3.client("lambda", region_name=REGION)
+        for _ in range(12):
+            state = lam.get_function_configuration(FunctionName=LAMBDA_NAME)
+            if state.get("LastUpdateStatus") != "InProgress":
+                break
+            time.sleep(5)
         lam.update_function_configuration(
             FunctionName=LAMBDA_NAME,
             Environment={"Variables": {

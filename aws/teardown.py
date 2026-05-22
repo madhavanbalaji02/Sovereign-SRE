@@ -10,6 +10,9 @@ RDS deletion does NOT create a final snapshot (dev/test resource).
 
 import sys
 import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import boto3
 from botocore.exceptions import ClientError
