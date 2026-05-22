@@ -1,0 +1,216 @@
+{
+  "Comment": "Sovereign-SRE autonomous healing pipeline — mirrors LangGraph for durable cloud execution",
+  "StartAt": "LogMonitor",
+  "States": {
+    "LogMonitor": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "sovereign-sre-remediation-trigger",
+        "Payload.$": "$"
+      },
+      "ResultPath": "$.log_monitor_result",
+      "Next": "AnomalyDetected",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.TooManyRequestsException", "Lambda.SdkClientException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "IncidentFailed"
+        }
+      ]
+    },
+    "AnomalyDetected": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.anomaly_detected",
+          "BooleanEquals": true,
+          "Next": "RootCauseAnalysis"
+        }
+      ],
+      "Default": "NoAnomaly"
+    },
+    "RootCauseAnalysis": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "sovereign-sre-rca",
+        "Payload.$": "$"
+      },
+      "ResultPath": "$.rca_result",
+      "Next": "HumanApproval",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.TooManyRequestsException"],
+          "MaxAttempts": 3,
+          "IntervalSeconds": 5
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "IncidentFailed"
+        }
+      ]
+    },
+    "HumanApproval": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish.waitForTaskToken",
+      "Parameters": {
+        "TopicArn.__": "States.Format('{}', $.sns_topic_arn)",
+        "Message": {
+          "taskToken.$": "$$.Task.Token",
+          "incident.$": "$",
+          "executionId.$": "$$.Execution.Id"
+        }
+      },
+      "HeartbeatSeconds": 3600,
+      "ResultPath": "$.approval_result",
+      "Next": "ApprovalDecision",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.HeartbeatTimeout"],
+          "ResultPath": "$.error",
+          "Next": "ApprovalExpired"
+        },
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "IncidentFailed"
+        }
+      ]
+    },
+    "ApprovalDecision": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.approval_result.approved",
+          "BooleanEquals": true,
+          "Next": "CodeFixer"
+        }
+      ],
+      "Default": "ApprovalRejected"
+    },
+    "CodeFixer": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "sovereign-sre-code-fixer",
+        "Payload.$": "$"
+      },
+      "ResultPath": "$.fix_result",
+      "Next": "Validator",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.TooManyRequestsException"],
+          "MaxAttempts": 2,
+          "IntervalSeconds": 3
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "IncidentFailed"
+        }
+      ]
+    },
+    "Validator": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "sovereign-sre-validator",
+        "Payload.$": "$"
+      },
+      "ResultPath": "$.validation_result",
+      "Next": "SaveIncident",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "IncidentFailed"
+        }
+      ]
+    },
+    "SaveIncident": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:putItem",
+      "Parameters": {
+        "TableName": "sovereign-sre-incidents",
+        "Item": {
+          "incident_id": {
+            "S.$": "$.incident_id"
+          },
+          "timestamp": {
+            "S.$": "$$.Execution.StartTime"
+          },
+          "status": {
+            "S": "resolved"
+          },
+          "step_function_execution_arn": {
+            "S.$": "$$.Execution.Id"
+          },
+          "trigger_source": {
+            "S.$": "$.trigger_source"
+          }
+        }
+      },
+      "End": true
+    },
+    "NoAnomaly": {
+      "Type": "Succeed",
+      "Comment": "Log analysis found no anomalies"
+    },
+    "ApprovalRejected": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:putItem",
+      "Parameters": {
+        "TableName": "sovereign-sre-incidents",
+        "Item": {
+          "incident_id": {"S.$": "$.incident_id"},
+          "timestamp": {"S.$": "$$.Execution.StartTime"},
+          "status": {"S": "rejected"},
+          "step_function_execution_arn": {"S.$": "$$.Execution.Id"}
+        }
+      },
+      "End": true
+    },
+    "ApprovalExpired": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:putItem",
+      "Parameters": {
+        "TableName": "sovereign-sre-incidents",
+        "Item": {
+          "incident_id": {"S.$": "$.incident_id"},
+          "timestamp": {"S.$": "$$.Execution.StartTime"},
+          "status": {"S": "approval_expired"},
+          "step_function_execution_arn": {"S.$": "$$.Execution.Id"}
+        }
+      },
+      "End": true
+    },
+    "IncidentFailed": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:putItem",
+      "Parameters": {
+        "TableName": "sovereign-sre-incidents",
+        "Item": {
+          "incident_id": {"S.$": "$.incident_id"},
+          "timestamp": {"S.$": "$$.Execution.StartTime"},
+          "status": {"S": "failed"},
+          "step_function_execution_arn": {"S.$": "$$.Execution.Id"}
+        }
+      },
+      "End": true
+    }
+  }
+}

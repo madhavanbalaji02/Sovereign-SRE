@@ -31,6 +31,17 @@ COLLECTION_NAME = os.environ.get("CHROMA_COLLECTION_NAME", "sovereign_sre_codeba
 # QUERY ENGINE FACTORY
 # =============================================================================
 
+def _pgvector_available() -> bool:
+    """Return True if pgvector is configured and reachable."""
+    if os.environ.get("USE_PGVECTOR", "false").lower() != "true":
+        return False
+    try:
+        from aws.pgvector.client import PgVectorClient
+        return PgVectorClient().health_check()
+    except Exception:
+        return False
+
+
 def create_query_engine(
     collection_name: str = COLLECTION_NAME,
     chroma_host: str = CHROMA_HOST,
@@ -42,10 +53,14 @@ def create_query_engine(
     """
     Create a query engine for the codebase.
 
+    Vector store selection (in priority order):
+      1. pgvector (RDS) — when USE_PGVECTOR=true and RDS is reachable
+      2. ChromaDB — default / local / HF Spaces fallback
+
     Args:
-        collection_name: ChromaDB collection name
-        chroma_host: ChromaDB API URL
-        llm_model: Grok model name for response generation
+        collection_name: ChromaDB collection name (ignored when pgvector active)
+        chroma_host: ChromaDB API URL (ignored when pgvector active)
+        llm_model: Groq model name for response generation
         embed_model: HuggingFace embedding model name
         similarity_top_k: Number of similar chunks to retrieve
         similarity_cutoff: Minimum similarity score
@@ -63,8 +78,22 @@ def create_query_engine(
     # Configure embeddings (local HuggingFace, no API key needed)
     embed = HuggingFaceEmbedding(model_name=embed_model)
     Settings.embed_model = embed
-    
-    # Connect to ChromaDB — ephemeral (in-memory) for HF Spaces demo, HTTP otherwise
+
+    # ------------------------------------------------------------------
+    # pgvector retriever path (production / AWS)
+    # ------------------------------------------------------------------
+    if _pgvector_available():
+        from aws.pgvector.retriever import PgVectorRetriever
+        retriever = PgVectorRetriever(
+            embed_model_name=embed_model,
+            similarity_top_k=similarity_top_k,
+            similarity_cutoff=similarity_cutoff,
+        )
+        return RetrieverQueryEngine(retriever=retriever)
+
+    # ------------------------------------------------------------------
+    # ChromaDB retriever path (local dev / HF Spaces)
+    # ------------------------------------------------------------------
     if os.environ.get("CHROMA_MODE") == "ephemeral":
         chroma_client = chromadb.EphemeralClient()
     else:
@@ -78,28 +107,23 @@ def create_query_engine(
 
     collection = chroma_client.get_or_create_collection(name=collection_name)
     vector_store = ChromaVectorStore(chroma_collection=collection)
-    
-    # Create index from vector store
+
     index = VectorStoreIndex.from_vector_store(
         vector_store,
         embed_model=embed,
     )
-    
-    # Create retriever
+
     retriever = VectorIndexRetriever(
         index=index,
         similarity_top_k=similarity_top_k,
     )
-    
-    # Create query engine
-    query_engine = RetrieverQueryEngine(
+
+    return RetrieverQueryEngine(
         retriever=retriever,
         node_postprocessors=[
             SimilarityPostprocessor(similarity_cutoff=similarity_cutoff)
         ],
     )
-    
-    return query_engine
 
 
 # =============================================================================

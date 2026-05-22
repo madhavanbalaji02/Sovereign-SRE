@@ -42,3 +42,16 @@ PyGithub>=2.1.0
 # Utilities
 rich>=13.7.0
 tenacity>=8.2.3
+
+# AWS SDK
+boto3>=1.34.0
+botocore>=1.34.0
+
+# pgvector / RDS
+psycopg2-binary>=2.9.9
+pgvector>=0.2.4
+
+# Testing
+moto[s3,dynamodb,sns,cloudwatch,stepfunctions,iam,logs,firehose,events,lambda]>=5.0.0
+pytest>=8.0.0
+pytest-asyncio>=0.23.0

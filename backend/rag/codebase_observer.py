@@ -282,7 +282,36 @@ class CodebaseObserver:
         )
         
         print(f"✅ Indexing complete! {len(nodes)} chunks indexed.")
+
+        # Also write to pgvector when USE_PGVECTOR=true
+        if os.environ.get("USE_PGVECTOR", "false").lower() == "true":
+            self._write_to_pgvector(nodes)
+
         return index
+
+    def _write_to_pgvector(self, nodes: list) -> None:
+        """Mirror embeddings to pgvector (RDS) after ChromaDB indexing."""
+        try:
+            from aws.pgvector.client import PgVectorClient
+            pg = PgVectorClient()
+            if not pg.health_check():
+                print("⚠️ pgvector not reachable — skipping pgvector write")
+                return
+
+            print(f"🐘 Writing {len(nodes)} chunks to pgvector...")
+            for i, node in enumerate(nodes):
+                embedding = self.embed_model_instance.get_text_embedding(node.text)
+                pg.upsert_embedding(
+                    file_path=node.metadata.get("file_path", f"unknown_{i}"),
+                    chunk_index=i,
+                    content=node.text,
+                    embedding=embedding,
+                    metadata=node.metadata,
+                    language=node.metadata.get("language", ""),
+                )
+            print(f"✅ pgvector write complete: {pg.get_chunk_count()} total chunks")
+        except Exception as e:
+            print(f"⚠️ pgvector write failed (non-fatal): {e}")
     
     def get_index(self) -> VectorStoreIndex:
         """Get the existing index without reindexing"""

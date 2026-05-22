@@ -5,6 +5,7 @@ LangGraph state machine with LogMonitor, RootCauseAnalyst, CodeFixer, and Valida
 """
 
 import os
+import time
 import uuid
 from typing import TypedDict, Annotated, Literal
 from datetime import datetime
@@ -20,6 +21,49 @@ from backend.agents.crew import create_sre_crew
 # =============================================================================
 
 HUMAN_APPROVAL_REQUIRED = os.environ.get("HUMAN_APPROVAL_REQUIRED", "true").lower() == "true"
+
+# ---------------------------------------------------------------------------
+# AWS helpers — imported lazily; failures are non-fatal so local dev works
+# ---------------------------------------------------------------------------
+
+def _metrics():
+    try:
+        from aws.cloudwatch.metrics import SREMetrics
+        return SREMetrics()
+    except Exception:
+        return None
+
+
+def _incident_store():
+    try:
+        from aws.dynamodb.incident_store import IncidentStore
+        return IncidentStore()
+    except Exception:
+        return None
+
+
+def _artifact_store():
+    try:
+        from aws.s3.artifact_store import ArtifactStore
+        return ArtifactStore()
+    except Exception:
+        return None
+
+
+def _cw_log_source():
+    try:
+        from aws.cloudwatch.log_source import CloudWatchLogSource
+        return CloudWatchLogSource()
+    except Exception:
+        return None
+
+
+def _firehose():
+    try:
+        from aws.kinesis.firehose_ingestor import FirehoseLogIngestor
+        return FirehoseLogIngestor()
+    except Exception:
+        return None
 
 
 # =============================================================================
@@ -38,32 +82,63 @@ class GraphState(TypedDict):
 async def log_monitor_node(state: GraphState) -> GraphState:
     """
     LogMonitor: Watches for errors and anomalies in logs.
-    
-    This node analyzes incoming logs and detects issues that need attention.
+
+    Log source priority:
+      1. Kinesis Firehose (last 5 min from S3) — highest fidelity
+      2. CloudWatch Logs — real-time fallback
+      3. Logs passed in SREState — offline / manual trigger fallback
     """
     sre_state = state["state"]
     sre_state.current_node = "log_monitor"
     sre_state.add_message("system", "🔍 Monitoring logs for errors and anomalies...")
-    
-    # In a real system, this would connect to log aggregation
-    # For now, we process the logs passed in the state
-    
+
+    extra_log_messages: list[str] = []
+
+    # 1. Firehose → S3 (best fidelity, ~60s lag)
+    fh = _firehose()
+    if fh:
+        try:
+            lines = fh.tail_recent_logs(minutes=5)
+            extra_log_messages.extend(lines)
+        except Exception:
+            pass
+
+    # 2. CloudWatch Logs (real-time, <60s)
+    if not extra_log_messages:
+        cw = _cw_log_source()
+        if cw:
+            try:
+                lines = cw.pull_all_default_groups(minutes=5)
+                extra_log_messages.extend(lines)
+            except Exception:
+                pass
+
+    # Append external logs as synthetic LogEntry objects
+    for msg in extra_log_messages[:50]:
+        level = "ERROR" if "ERROR" in msg.upper() or "CRITICAL" in msg.upper() else "INFO"
+        sre_state.logs.append(LogEntry(
+            timestamp=datetime.utcnow().isoformat(),
+            level=level,
+            message=msg,
+            source="aws",
+        ))
+
     issues = []
     for log in sre_state.logs:
         if log.level in ["ERROR", "CRITICAL"]:
             issues.append(f"{log.level}: {log.message}")
-    
+
     sre_state.detected_issues = issues
-    
+
     if issues:
         sre_state.add_message(
             "agent",
             f"⚠️ Detected {len(issues)} issue(s):\n" + "\n".join(f"  - {i}" for i in issues[:5]),
-            "log_monitor"
+            "log_monitor",
         )
     else:
         sre_state.add_message("agent", "✅ No critical issues detected", "log_monitor")
-    
+
     return {"state": sre_state}
 
 
@@ -335,30 +410,98 @@ async def run_sre_pipeline(
     logs: list[dict],
     run_id: str | None = None,
     human_approved: bool = False,
+    trigger_source: str = "manual",
+    alarm_name: str = "",
 ) -> SREState:
     """
     Run the SRE pipeline with the given logs.
-    
+
     Args:
         logs: List of log entries to analyze
         run_id: Optional run ID (generated if not provided)
         human_approved: Whether human has pre-approved fixes
-        
+        trigger_source: Origin of the trigger (manual, cloudwatch_alarm, etc.)
+        alarm_name: CloudWatch alarm name if triggered automatically
+
     Returns:
         Final SREState after pipeline execution
     """
+    incident_id = run_id or str(uuid.uuid4())
+    start_time = time.monotonic()
+
+    # Push pipeline start metric
+    metrics = _metrics()
+    if metrics:
+        metrics.record_pipeline_start(incident_id)
+
+    # Save initial incident record
+    store = _incident_store()
+    if store:
+        try:
+            store.save_incident({
+                "incident_id": incident_id,
+                "status": "running",
+                "trigger_source": trigger_source,
+                "alarm_name": alarm_name,
+            })
+        except Exception:
+            pass
+
     # Create initial state
     state = SREState(
-        run_id=run_id or str(uuid.uuid4()),
+        run_id=incident_id,
         logs=[LogEntry(**log) for log in logs],
         human_approved=human_approved,
     )
-    
+
     # Compile and run graph
-    app = compile_graph()
-    
-    # Execute
+    graph_app = compile_graph()
     config = {"configurable": {"thread_id": state.run_id}}
-    result = await app.ainvoke({"state": state}, config)
-    
-    return result["state"]
+    result = await graph_app.ainvoke({"state": state}, config)
+    final_state: SREState = result["state"]
+
+    duration_ms = (time.monotonic() - start_time) * 1000
+    success = final_state.status == "completed"
+
+    # Push completion metrics
+    if metrics:
+        metrics.record_pipeline_complete(incident_id, duration_ms, success)
+        if final_state.root_cause:
+            metrics.record_fix_applied(incident_id, final_state.root_cause.confidence)
+
+    # Save diff to S3 and persist final state to DynamoDB
+    artifacts = _artifact_store()
+    diff_s3_key = ""
+    if artifacts and final_state.proposed_fixes:
+        try:
+            diff_text = "\n\n".join(f.diff for f in final_state.proposed_fixes)
+            diff_s3_key, _ = artifacts.save_diff(incident_id, diff_text)
+            artifacts.save_log_snapshot(
+                incident_id, [log.message for log in final_state.logs[:50]]
+            )
+            report = {
+                "incident_id": incident_id,
+                "status": final_state.status,
+                "root_cause": final_state.root_cause.model_dump() if final_state.root_cause else {},
+                "duration_ms": duration_ms,
+            }
+            artifacts.save_report(incident_id, report)
+        except Exception:
+            pass
+
+    if store:
+        try:
+            store.save_incident({
+                "incident_id": incident_id,
+                "status": final_state.status,
+                "trigger_source": trigger_source,
+                "alarm_name": alarm_name,
+                "root_cause": final_state.root_cause.summary if final_state.root_cause else "",
+                "confidence": final_state.root_cause.confidence if final_state.root_cause else 0,
+                "diff_s3_key": diff_s3_key,
+                "resolution_time_ms": int(duration_ms),
+            })
+        except Exception:
+            pass
+
+    return final_state

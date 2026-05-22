@@ -13,6 +13,16 @@ from datetime import datetime
 import json
 import uuid
 
+# ---------------------------------------------------------------------------
+# Load secrets from SSM Parameter Store at startup.
+# Falls back silently to .env / os.environ when AWS is not configured.
+# ---------------------------------------------------------------------------
+try:
+    from aws.ssm.secrets import SecretsManager
+    SecretsManager().load_all_to_env()
+except Exception:
+    pass  # local dev without AWS — .env already loaded by uvicorn
+
 # =============================================================================
 # APP INITIALIZATION
 # =============================================================================
@@ -30,6 +40,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount AWS routes
+try:
+    from backend.api.routes.aws_routes import router as aws_router
+    app.include_router(aws_router)
+except Exception:
+    pass  # AWS routes optional — local dev without aws/ package works fine
 
 
 # =============================================================================

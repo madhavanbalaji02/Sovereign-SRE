@@ -291,6 +291,102 @@ Embeddings always run **locally** via HuggingFace (`BAAI/bge-m3`) — no embeddi
 
 ---
 
+## ☁️ AWS Architecture
+
+Sovereign-SRE integrates 11 AWS services for production-grade, cloud-native operation.
+
+### Service Map
+
+```
+Trigger layer:
+  CloudWatch Alarm → EventBridge → Lambda → Step Functions
+
+AI layer:
+  Step Functions → Amazon Bedrock (Claude Haiku) → Agent pipeline
+
+Data layer:
+  RDS pgvector (RAG embeddings) + DynamoDB (incidents) + S3 (diffs/reports)
+
+Log streaming:
+  Kinesis Firehose → S3 → Agent LogMonitor node
+
+Human approval:
+  Step Functions waitForTaskToken → SNS email → /api/approvals/{id}
+
+Secrets:
+  SSM Parameter Store → loaded into env at FastAPI startup
+
+IAM:
+  sovereign-sre-execution-role (least-privilege inline policy)
+```
+
+### Quick AWS Setup
+
+```bash
+# 1. Configure AWS credentials
+aws configure
+
+# 2. Create all resources (idempotent — safe to re-run)
+python aws/setup.py
+
+# 3. Migrate existing ChromaDB embeddings to pgvector
+python aws/pgvector/migrate.py
+
+# 4. Run tests (all AWS calls mocked with moto)
+pytest tests/ -v
+
+# 5. Fire a test incident end-to-end
+curl -X POST http://localhost:8001/api/pipeline/trigger \
+  -H "Content-Type: application/json" \
+  -d '{"trigger_source":"manual","alarm_reason":"OOMKilled payments-service","severity":"high"}'
+
+# Tear down all resources when done
+python aws/teardown.py
+```
+
+### AWS Cost Table
+
+All services are within free tier or near-zero cost for portfolio/demo use:
+
+| Service          | Free Tier                  | Est. Monthly Cost |
+|------------------|----------------------------|-------------------|
+| Bedrock (Haiku)  | No free tier               | ~$1               |
+| RDS db.t3.micro  | 750 hrs free (12 months)   | $0                |
+| Step Functions   | 4K state transitions free  | $0                |
+| DynamoDB         | 25 GB + 25 RCU/WCU forever | $0                |
+| S3               | 5 GB free                  | $0                |
+| Lambda           | 1M requests free           | $0                |
+| CloudWatch       | 10 alarms + 5 GB logs free | $0                |
+| SNS              | 1M email notifs free       | $0                |
+| Kinesis Firehose | 500K records free          | $0                |
+| SSM Param Store  | Standard params free       | $0                |
+| EventBridge      | 1M events free             | $0                |
+| **TOTAL**        |                            | **~$1/month**     |
+
+> **Cost guardrail:** `NEVER ADD` SageMaker endpoints, EC2, ECS, or Redshift — those cost real money.
+
+### AWS Directory Structure
+
+```
+aws/
+├── config.py                  # Resource names, ARNs, region constants
+├── setup.py                   # Creates ALL resources (idempotent)
+├── teardown.py                # Destroys all resources safely
+├── bedrock/                   # LLM backend (Claude Haiku default)
+├── pgvector/                  # Production vector DB (RDS pgvector)
+├── step_functions/            # Durable pipeline orchestration
+├── kinesis/                   # Real-time log streaming
+├── cloudwatch/                # Log source + custom metrics + alarms
+├── eventbridge/               # Alarm → Lambda routing rules
+├── lambda_functions/          # Remediation trigger Lambda
+├── sns/                       # Email approval gate
+├── dynamodb/                  # Incident history + agent state
+├── s3/                        # Diffs, reports, audit trail
+└── ssm/                       # Secure secrets management
+```
+
+---
+
 ## 🤗 Deploy to HuggingFace Spaces
 
 Run Sovereign-SRE as a public demo with zero server costs. The `hf_deploy/` folder contains a single-container setup managed by **supervisord** — ChromaDB, the MCP server, and the FastAPI backend all run on port 7860.
