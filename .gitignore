@@ -69,7 +69,13 @@ logs/
 chroma_data/
 ollama_data/
 
+# Dataset clones (large, re-cloneable via scripts/fetch_datasets.py)
+data/gaia/
+data/aiopsarena/
+
 # Temporary files
 tmp/
 temp/
 *.tmp
+.env.local
+frontend/.env.local
