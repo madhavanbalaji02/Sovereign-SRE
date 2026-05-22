@@ -42,7 +42,9 @@ ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:8000",
     "http://3.149.31.90",
+    "http://3.149.31.90:8000",
     "http://ec2-3-149-31-90.us-east-2.compute.amazonaws.com",
+    "http://ec2-3-149-31-90.us-east-2.compute.amazonaws.com:8000",
     "https://main.d2qpjzu9cicpu8.amplifyapp.com",
     "https://*.amplifyapp.com",
 ]
