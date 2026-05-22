@@ -8,6 +8,8 @@ or from env RDS_CONNECTION_STRING.
 # RDS COST: db.t3.micro = FREE TIER (750 hrs/month for 12 months)
 """
 
+
+from __future__ import annotations
 import json
 import os
 from contextlib import contextmanager

@@ -9,6 +9,8 @@ Tries BedrockLLM first; falls back to the existing Groq provider if:
 Presents the same complete() / stream() / chat() interface.
 """
 
+
+from __future__ import annotations
 import os
 from typing import Iterator, Optional
 

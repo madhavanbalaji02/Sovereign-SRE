@@ -6,6 +6,8 @@ Create and manage alarms that auto-trigger the healing pipeline.
 # COST SAFE: CW Alarms <10 = $0
 """
 
+
+from __future__ import annotations
 from typing import Optional
 
 import boto3

@@ -4,6 +4,8 @@ Agents API Routes
 FastAPI endpoints for agent operations and WebSocket streaming.
 """
 
+
+from __future__ import annotations
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 from typing import Optional

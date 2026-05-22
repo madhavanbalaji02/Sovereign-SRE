@@ -8,6 +8,8 @@ Lifecycle: objects deleted after 30 days.
 # COST SAFE: S3 <5GB = $0, presigned URLs are free
 """
 
+
+from __future__ import annotations
 import json
 import os
 from typing import Optional

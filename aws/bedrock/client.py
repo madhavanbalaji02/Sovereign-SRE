@@ -9,6 +9,8 @@ so backend/agents/ code needs zero changes.
 # A typical SRE pipeline run = ~5K tokens total = ~$0.008 per incident
 """
 
+
+from __future__ import annotations
 import json
 from typing import Iterator, Optional
 

@@ -6,6 +6,8 @@ incident history (DynamoDB), artifact retrieval (S3),
 human approval webhook (SNS/Step Functions), and metrics summary.
 """
 
+
+from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 from typing import Optional

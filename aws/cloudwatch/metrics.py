@@ -6,6 +6,8 @@ Namespace: SovereignSRE
 # COST SAFE: CW Alarms <10 = $0, Logs <5GB = $0
 """
 
+
+from __future__ import annotations
 import os
 from datetime import datetime, timezone
 from typing import Optional

@@ -4,6 +4,8 @@ SRE CrewAI Crew
 CrewAI crew with Senior SRE and System Researcher agents.
 """
 
+
+from __future__ import annotations
 import os
 from typing import Optional
 

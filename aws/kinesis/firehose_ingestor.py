@@ -11,6 +11,8 @@ Note: Firehose buffers 60s minimum.
 # SRE log volume: ~10MB/day = ~300MB/month = ~$0.009/month. Essentially free.
 """
 
+
+from __future__ import annotations
 import json
 import os
 from datetime import datetime, timezone

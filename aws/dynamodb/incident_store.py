@@ -12,6 +12,8 @@ Table: sovereign-sre-incidents
 # COST SAFE: DynamoDB pay-per-request, <1000 ops/day = $0
 """
 
+
+from __future__ import annotations
 import json
 import os
 import uuid

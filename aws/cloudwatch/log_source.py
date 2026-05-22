@@ -4,6 +4,8 @@ CloudWatch Log Source
 Pull logs from CloudWatch Log Groups for the agent's LogMonitor node.
 """
 
+
+from __future__ import annotations
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Iterator, Optional

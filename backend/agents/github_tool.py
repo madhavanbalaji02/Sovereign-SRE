@@ -4,6 +4,8 @@ GitHub MCP Tool
 MCP tool for creating pull requests via the GitHub API.
 """
 
+
+from __future__ import annotations
 import os
 from typing import Optional
 from datetime import datetime

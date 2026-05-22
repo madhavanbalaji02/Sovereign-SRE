@@ -11,6 +11,8 @@ Approval path selection:
     (suitable for local dev and the Next.js dashboard)
 """
 
+
+from __future__ import annotations
 import asyncio
 import os
 from typing import Optional, Callable

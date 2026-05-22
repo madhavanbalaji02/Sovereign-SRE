@@ -4,6 +4,8 @@ Sovereign-SRE Backend API (Docker Compatible)
 FastAPI backend for autonomous SRE operations.
 """
 
+
+from __future__ import annotations
 from dotenv import load_dotenv
 load_dotenv()  # load .env before any AWS/config imports
 

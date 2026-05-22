@@ -5,6 +5,8 @@ Recursively scans the project, chunks files using SourceCodeNodeParser,
 and indexes them in ChromaDB for semantic search.
 """
 
+
+from __future__ import annotations
 import os
 from pathlib import Path
 from typing import Optional

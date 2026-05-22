@@ -4,6 +4,8 @@ SRE Agent State
 Shared state schema for the LangGraph state machine.
 """
 
+
+from __future__ import annotations
 from typing import Optional, Literal
 from pydantic import BaseModel, Field
 from datetime import datetime
