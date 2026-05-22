@@ -55,6 +55,7 @@ SSM_KEYS = {
     "rds-connection-string": f"{SSM_PREFIX}/rds-connection-string",
     "backend-url":           f"{SSM_PREFIX}/backend-url",
     "sns-topic-arn":         f"{SSM_PREFIX}/sns-topic-arn",
+    "state-machine-arn":     f"{SSM_PREFIX}/state-machine-arn",
 }
 
 # ---------------------------------------------------------------------------

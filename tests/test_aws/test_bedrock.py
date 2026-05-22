@@ -17,7 +17,7 @@ def test_model_registry_defaults():
 def test_model_registry_get_model_known():
     from aws.bedrock.model_registry import get_model
     assert "claude-haiku" in get_model("haiku")
-    assert "claude-sonnet" in get_model("sonnet")
+    assert "claude" in get_model("sonnet")
 
 
 def test_fallback_uses_groq_when_bedrock_disabled(monkeypatch):

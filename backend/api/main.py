@@ -4,6 +4,9 @@ Sovereign-SRE Backend API (Docker Compatible)
 FastAPI backend for autonomous SRE operations.
 """
 
+from dotenv import load_dotenv
+load_dotenv()  # load .env before any AWS/config imports
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse

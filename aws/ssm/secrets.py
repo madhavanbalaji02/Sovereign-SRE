@@ -86,6 +86,7 @@ class SecretsManager:
             "rds-connection-string": "RDS_CONNECTION_STRING",
             "backend-url":           "BACKEND_URL",
             "sns-topic-arn":         "SNS_TOPIC_ARN",
+            "state-machine-arn":     "STATE_MACHINE_ARN",
         }
         for ssm_key, env_key in env_map.items():
             value = self.get(ssm_key)

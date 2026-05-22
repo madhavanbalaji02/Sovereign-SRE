@@ -14,8 +14,10 @@ from aws.config import STATE_MACHINE_ARN, REGION
 
 
 class PipelineExecutor:
-    def __init__(self, state_machine_arn: str = STATE_MACHINE_ARN, region: str = REGION):
-        self._sm_arn = state_machine_arn or STATE_MACHINE_ARN
+    def __init__(self, state_machine_arn: str = "", region: str = REGION):
+        # Read at call time so .env / SSM values set after import are picked up
+        import os as _os
+        self._sm_arn = state_machine_arn or _os.environ.get("STATE_MACHINE_ARN", STATE_MACHINE_ARN)
         self._region = region
         self._client: Optional[object] = None
 

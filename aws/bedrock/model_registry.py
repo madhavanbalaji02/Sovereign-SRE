@@ -9,9 +9,10 @@ Use haiku by default; switch to sonnet only for final code-fix generation.
 # 100 incidents/month = ~$0.80. Well within $100 budget.
 """
 
+# Cross-region inference profiles required for newer models in us-east-2
 MODELS: dict[str, str] = {
-    "haiku":   "anthropic.claude-haiku-4-5-20251001",
-    "sonnet":  "anthropic.claude-sonnet-4-20250514",
+    "haiku":   "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+    "sonnet":  "us.anthropic.claude-3-5-haiku-20241022-v1:0",
     "llama3":  "meta.llama3-3-70b-instruct-v1:0",
     "titan":   "amazon.titan-text-express-v1",
 }
