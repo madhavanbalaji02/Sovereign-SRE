@@ -5,15 +5,15 @@
 ![Sovereign-SRE](https://img.shields.io/badge/Sovereign-SRE-00ffff?style=for-the-badge&logo=kubernetes&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![Next.js](https://img.shields.io/badge/Next.js-15-black?style=for-the-badge&logo=next.js&logoColor=white)
-![AWS](https://img.shields.io/badge/AWS-11%20Services-FF9900?style=for-the-badge&logo=amazonaws&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)
-[![HuggingFace Spaces](https://img.shields.io/badge/🤗%20HuggingFace-Spaces-orange?style=for-the-badge)](https://madhavan02-sovereign-sre.hf.space)
+![AWS](https://img.shields.io/badge/AWS-13%20Services-FF9900?style=for-the-badge&logo=amazonaws&logoColor=white)
+[![Dashboard](https://img.shields.io/badge/Dashboard-AWS_Amplify-orange?style=for-the-badge&logo=amazonaws)](https://main.d2qpjzu9cicpu8.amplifyapp.com)
+[![Backend](https://img.shields.io/badge/API-EC2_t3.micro-orange?style=for-the-badge&logo=amazonaws)](http://3.149.31.90/health)
 
-**An Autonomous Self-Healing Infrastructure System — Now on AWS**
+**An Autonomous Self-Healing Infrastructure System — Fully on AWS**
 
 *Detect → Diagnose → Fix → Deploy — All Without Human Intervention*
 
-[Live Demo](https://madhavan02-sovereign-sre.hf.space) • [Architecture](#️-architecture) • [AWS Setup](#-aws-setup) • [Quick Start](#-quick-start) • [Features](#-features)
+[Dashboard](https://main.d2qpjzu9cicpu8.amplifyapp.com) • [API](http://3.149.31.90/health) • [Architecture](#️-architecture) • [AWS Setup](#-aws-setup) • [Features](#-features)
 
 </div>
 
@@ -176,6 +176,47 @@
 - Real-time WebSocket streaming of agent thoughts
 - Visual pipeline: Log Monitor → Root Cause → Code Fixer → Approval → Validator
 - Terminal-style log viewer with filtering
+
+---
+
+## 🚀 Live Deployment
+
+| Component | AWS Service | URL / Endpoint |
+|---|---|---|
+| Next.js Dashboard | AWS Amplify | https://main.d2qpjzu9cicpu8.amplifyapp.com |
+| FastAPI Backend | EC2 t3.micro | http://3.149.31.90 |
+| Vector DB | RDS pgvector | sovereign-sre-db.creky0ag2sa8.us-east-2.rds.amazonaws.com |
+| Incident Store | DynamoDB | sovereign-sre-incidents |
+| Artifact Store | S3 | sovereign-sre-artifacts-574772738370 |
+| AI Inference | Bedrock | us.anthropic.claude-haiku-4-5-20251001-v1:0 |
+| Pipeline Orch. | Step Functions | sovereign-sre-pipeline |
+| Alerts | CloudWatch | 8 custom metrics, 3 alarms |
+| Trigger | EventBridge | sovereign-sre-alarm-trigger |
+| Remediation | Lambda | sovereign-sre-remediation-trigger |
+| Approvals | SNS | sovereign-sre-approvals |
+| Secrets | SSM | /sovereign-sre/* (7 parameters) |
+| CI/CD | GitHub Actions | `.github/workflows/deploy.yml` |
+
+### Cost Table — 13 AWS Services
+
+| Service | Free Tier | Monthly Cost |
+|---|---|---|
+| EC2 t3.micro | 750 hrs/month (12 months) | $0 |
+| AWS Amplify | 1,000 build min + 15 GB | $0 |
+| RDS db.t3.micro | 750 hrs/month (12 months) | $0 |
+| DynamoDB | 25 GB + 25 RCU/WCU forever | $0 |
+| S3 | 5 GB free | $0 |
+| Lambda | 1M requests free | $0 |
+| Step Functions | 4K state transitions free | $0 |
+| CloudWatch | 10 alarms + 5 GB logs | $0 |
+| SNS | 1M email notifications | $0 |
+| SSM Parameter Store | Standard params free | $0 |
+| EventBridge | 1M events free | $0 |
+| Bedrock Claude Haiku | No free tier | ~$1 |
+| Elastic IP | Free while EC2 running | $0 |
+| **TOTAL** | | **~$1/month** |
+
+> **Cost guardrail:** Always **terminate** (not stop) EC2 — stopped instances still charge Elastic IP at $0.005/hr.
 
 ---
 

@@ -36,9 +36,19 @@ app = FastAPI(
     version="1.0.0",
 )
 
+ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:8000",
+    "http://3.149.31.90",
+    "http://ec2-3-149-31-90.us-east-2.compute.amazonaws.com",
+    "https://main.d2qpjzu9cicpu8.amplifyapp.com",
+    "https://*.amplifyapp.com",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=r"https://.*\.amplifyapp\.com",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
