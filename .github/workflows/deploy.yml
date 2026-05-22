@@ -1,0 +1,61 @@
+name: Deploy Sovereign-SRE
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy-backend:
+    name: Deploy FastAPI to EC2
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            us-east-2
+
+      - name: Deploy to EC2 via SSM Run Command
+        run: |
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids ${{ secrets.EC2_INSTANCE_ID }} \
+            --document-name AWS-RunShellScript \
+            --parameters 'commands=[
+              "cd /opt/sovereign-sre",
+              "git pull origin main",
+              "pip3 install -r backend/requirements.txt -q",
+              "systemctl restart sovereign-sre",
+              "sleep 5",
+              "systemctl is-active sovereign-sre && echo DEPLOY_OK || echo DEPLOY_FAILED",
+              "curl -s http://localhost:8000/health"
+            ]' \
+            --output text \
+            --query 'Command.CommandId')
+
+          echo "Command ID: $COMMAND_ID"
+
+          # Poll for result (max 2 min)
+          for i in $(seq 1 24); do
+            sleep 5
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id ${{ secrets.EC2_INSTANCE_ID }} \
+              --query 'Status' --output text 2>/dev/null || echo "Pending")
+            echo "Status: $STATUS"
+            if [[ "$STATUS" == "Success" || "$STATUS" == "Failed" ]]; then
+              aws ssm get-command-invocation \
+                --command-id "$COMMAND_ID" \
+                --instance-id ${{ secrets.EC2_INSTANCE_ID }} \
+                --query 'StandardOutputContent' --output text
+              [[ "$STATUS" == "Success" ]] && exit 0 || exit 1
+            fi
+          done
+          echo "Deploy timed out"
+          exit 1
+
+  # Amplify auto-deploys when it detects GitHub pushes (if connected via OAuth)
+  # For manual zip deployment, re-run: python3 aws/amplify/setup_amplify.py
