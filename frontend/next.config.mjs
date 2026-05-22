@@ -1,17 +1,8 @@
 /** @type {import('next').NextConfig} */
-const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000';
-
 const nextConfig = {
-    output: 'standalone',
+    output: 'export',   // Static HTML export — required for Amplify manual zip deploy
     reactStrictMode: true,
-    async rewrites() {
-        return [
-            {
-                source: '/api/:path*',
-                destination: `${BACKEND}/api/:path*`,
-            },
-        ];
-    },
+    trailingSlash: true,
 };
 
 export default nextConfig;
