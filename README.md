@@ -12,7 +12,7 @@
 
 **An Autonomous Self-Healing Infrastructure System — Fully on AWS**
 
-*Detect → Diagnose → Fix → Deploy — All Without Human Intervention*
+*Detect → Diagnose → Fix → Human Approval → Deploy*
 
 [Dashboard](https://main.d2qpjzu9cicpu8.amplifyapp.com) • [API](http://3.149.31.90/health) • [Architecture](#️-architecture) • [Real Data](#-real-incident-data) • [AWS Setup](#-aws-setup)
 
@@ -22,7 +22,7 @@
 
 ## 🎯 Overview
 
-**Sovereign-SRE** is a production-grade autonomous SRE system that combines multi-agent AI with 13 AWS services to detect, diagnose, and fix infrastructure incidents automatically — with a human approval gate before any change is applied.
+**Sovereign-SRE** is a production-grade autonomous SRE system that combines multi-agent AI with 13 AWS services to detect, diagnose, and propose fixes for infrastructure incidents — then pauses for a human approval via email before any change is deployed.
 
 **What makes it real:** Every incident on the dashboard is sourced from actual production anomaly datasets (GAIA + AIOpsArena), with real metric values, real service names, real fault durations, and AI-generated root causes from Claude Haiku. No made-up numbers.
 
