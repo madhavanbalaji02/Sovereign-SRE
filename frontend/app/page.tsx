@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Shield, Zap, RefreshCw, Brain, Activity, GitPullRequest,
     Terminal, ExternalLink, RotateCcw, CheckCircle2,
-    Layers, LayoutDashboard, Database,
+    Layers, LayoutDashboard, Database, BarChart2,
 } from 'lucide-react';
 import DecisionTree from '@/components/DecisionTree';
 import ThoughtStream from '@/components/ThoughtStream';
@@ -14,6 +14,8 @@ import IncidentLog, { type Incident, type SparkPoint } from '@/components/Incide
 import MetricsBar from '@/components/MetricsBar';
 import ArchitectureTab from '@/components/ArchitectureTab';
 import DataSourcesTab from '@/components/DataSourcesTab';
+import AnalyticsTab from '@/components/AnalyticsTab';
+import LiveLogFeed from '@/components/LiveLogFeed';
 
 const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL ?? '';
 
@@ -414,7 +416,7 @@ const STATIC_INCIDENTS: Incident[] = [
 interface Thought { id: string; agent: string; thought: string; timestamp: string; }
 type DemoState = 'idle' | 'running' | 'waiting_approval' | 'complete';
 type PipelineStatus = 'idle' | 'running' | 'waiting_approval' | 'completed' | 'failed';
-type Tab = 'dashboard' | 'architecture' | 'datasources';
+type Tab = 'dashboard' | 'architecture' | 'datasources' | 'analytics';
 const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
 // ── Hero Banner ──────────────────────────────────────────────────────────────
@@ -823,6 +825,7 @@ export default function Dashboard() {
                     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="h-4 w-4" /> },
                     { id: 'architecture', label: 'Architecture', icon: <Layers className="h-4 w-4" /> },
                     { id: 'datasources', label: 'Data Sources', icon: <Database className="h-4 w-4" /> },
+                    { id: 'analytics', label: 'Analytics', icon: <BarChart2 className="h-4 w-4" /> },
                 ] as { id: Tab; label: string; icon: React.ReactNode }[]).map(tab => (
                     <button
                         key={tab.id}
@@ -921,25 +924,36 @@ export default function Dashboard() {
                         Most common: {metrics.mostCommonType} · Worst: {metrics.worstIncident}
                     </p>
 
-                    {/* Incident log */}
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.2 }}
-                        className="cyber-card p-5"
-                    >
-                        <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-2">
-                                <Terminal className="h-5 w-5 text-cyber-accent" />
-                                <h2 className="font-display text-base text-cyber-accent">Incident Log</h2>
-                                <span className="text-xs text-cyber-muted font-mono ml-2">
-                                    {isConnected ? 'live data' : 'GAIA + AIOpsArena dataset'}
-                                </span>
+                    {/* Live Log Feed + Incident log side-by-side on wide screens */}
+                    <div className="grid grid-cols-12 gap-4 mb-4">
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.18 }}
+                            className="col-span-12 lg:col-span-5"
+                        >
+                            <LiveLogFeed />
+                        </motion.div>
+
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.2 }}
+                            className="col-span-12 lg:col-span-7 cyber-card p-5"
+                        >
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-2">
+                                    <Terminal className="h-5 w-5 text-cyber-accent" />
+                                    <h2 className="font-display text-base text-cyber-accent">Incident Log</h2>
+                                    <span className="text-xs text-cyber-muted font-mono ml-2">
+                                        {isConnected ? 'live data' : 'GAIA + AIOpsArena dataset'}
+                                    </span>
+                                </div>
+                                <span className="text-xs text-cyber-muted">{incidents.length} incidents</span>
                             </div>
-                            <span className="text-xs text-cyber-muted">{incidents.length} incidents</span>
-                        </div>
-                        <IncidentLog incidents={incidents} />
-                    </motion.div>
+                            <IncidentLog incidents={incidents} />
+                        </motion.div>
+                    </div>
                 </>
             )}
 
@@ -956,12 +970,15 @@ export default function Dashboard() {
 
             {/* ── Data Sources Tab ─────────────────────────────────────── */}
             {activeTab === 'datasources' && (
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="cyber-card p-6"
-                >
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="cyber-card p-6">
                     <DataSourcesTab totalBedrockCost={metrics.totalCost} />
+                </motion.div>
+            )}
+
+            {/* ── Analytics Tab ────────────────────────────────────────── */}
+            {activeTab === 'analytics' && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                    <AnalyticsTab />
                 </motion.div>
             )}
         </div>

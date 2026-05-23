@@ -1,0 +1,82 @@
+name: LLM Eval on Prompt Change
+
+on:
+  push:
+    paths:
+      - 'backend/agents/prompts/**'
+      - 'evaluation/ground_truth.jsonl'
+    branches: [main]
+  pull_request:
+    paths:
+      - 'backend/agents/prompts/**'
+      - 'evaluation/ground_truth.jsonl'
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install eval dependencies
+        run: |
+          pip install -r evaluation/requirements.txt
+
+      - name: Run eval (20 samples for CI speed)
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: us-east-2
+          S3_BUCKET: sovereign-sre-artifacts-574772738370
+        run: |
+          python evaluation/eval_runner.py \
+            --prompt-version $(git rev-parse --short HEAD) \
+            --n-samples 20 \
+            --fail-below 0.75
+
+      - name: Upload eval report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-report
+          path: evaluation/last_report.json
+
+      - name: Comment eval results on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs')
+            let report
+            try {
+              report = JSON.parse(fs.readFileSync('./evaluation/last_report.json', 'utf8'))
+            } catch(e) {
+              console.log('No report found')
+              return
+            }
+            const m = report.metrics
+            const p = report.performance
+            const pass = m.composite_score >= 0.75
+            const body = `## 🧪 LLM Eval Results — \`${report.prompt_version}\`
+
+| Metric | Score |
+|--------|-------|
+| Root Cause Accuracy | ${m.root_cause_accuracy} |
+| RAGAS Faithfulness | ${m.ragas_faithfulness} |
+| Semantic Similarity | ${m.semantic_similarity} |
+| File Attribution | ${m.file_attribution} |
+| **Composite** | **${m.composite_score}** |
+
+**Performance:** p50=${p.p50_latency_ms}ms · p95=${p.p95_latency_ms}ms · cost=$${p.total_cost_usd}
+
+**Threshold:** 0.75 · **Status:** ${pass ? '✅ PASS' : '❌ FAIL — prompt change degraded accuracy'}`
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body
+            })
