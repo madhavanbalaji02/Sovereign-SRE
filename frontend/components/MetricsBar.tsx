@@ -1,7 +1,7 @@
 'use client';
 
-import { motion } from 'framer-motion';
-import { Activity, CheckCircle2, Clock, DollarSign, TrendingUp, AlertTriangle } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Activity, CheckCircle2, Clock, DollarSign, TrendingUp, AlertTriangle, Zap } from 'lucide-react';
 
 export interface DashboardMetrics {
     total: number;
@@ -21,29 +21,56 @@ interface MetricCardProps {
     sub?: string;
     color: string;
     delay: number;
+    highlight?: boolean;
+    badge?: string;
 }
 
-function MetricCard({ icon, label, value, sub, color, delay }: MetricCardProps) {
+function MetricCard({ icon, label, value, sub, color, delay, highlight, badge }: MetricCardProps) {
     return (
         <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay }}
-            className="flex-1 cyber-card p-4 flex items-center gap-4 min-w-[140px]"
+            className={`flex-1 cyber-card p-4 flex items-center gap-4 min-w-[140px] relative overflow-hidden transition-all duration-300 ${
+                highlight ? 'border border-cyber-success/60 shadow-[0_0_12px_rgba(0,255,136,0.25)]' : ''
+            }`}
         >
-            <div className={`${color} opacity-80 flex-shrink-0`}>{icon}</div>
-            <div className="min-w-0">
+            {/* Pulse overlay when highlighted */}
+            {highlight && (
+                <motion.div
+                    className="absolute inset-0 bg-cyber-success/5 pointer-events-none"
+                    animate={{ opacity: [0.3, 0.6, 0.3] }}
+                    transition={{ repeat: Infinity, duration: 1.5 }}
+                />
+            )}
+            <div className={`${color} opacity-80 flex-shrink-0 relative z-10`}>{icon}</div>
+            <div className="min-w-0 relative z-10">
                 <p className="text-cyber-muted text-xs font-display tracking-wider uppercase mb-0.5 truncate">{label}</p>
                 <div className="flex items-baseline gap-1.5 flex-wrap">
-                    <span className={`font-display text-xl font-bold ${color} truncate`}>{value}</span>
+                    <motion.span
+                        key={value}
+                        initial={{ scale: 1.3, color: '#00ff88' }}
+                        animate={{ scale: 1, color: '' }}
+                        transition={{ duration: 0.4 }}
+                        className={`font-display text-xl font-bold ${color} truncate`}
+                    >
+                        {value}
+                    </motion.span>
                     {sub && <span className="text-cyber-muted text-xs truncate">{sub}</span>}
                 </div>
+                {badge && (
+                    <span className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-bold bg-cyber-success/20 text-cyber-success border border-cyber-success/40">
+                        <Zap className="h-2.5 w-2.5" /> {badge}
+                    </span>
+                )}
             </div>
         </motion.div>
     );
 }
 
 export default function MetricsBar({ metrics }: { metrics: DashboardMetrics }) {
+    const runs = metrics.demoRuns ?? 0;
+
     return (
         <div className="flex gap-3 flex-wrap mb-4">
             <MetricCard
@@ -58,9 +85,11 @@ export default function MetricsBar({ metrics }: { metrics: DashboardMetrics }) {
                 icon={<CheckCircle2 className="h-5 w-5" />}
                 label="Resolved"
                 value={String(metrics.resolvedCount)}
-                sub={`(${metrics.resolvedPct}%)${metrics.demoRuns ? ` +${metrics.demoRuns} live` : ''}`}
+                sub={`(${metrics.resolvedPct}%)`}
                 color="text-cyber-success"
                 delay={0.05}
+                highlight={runs > 0}
+                badge={runs > 0 ? `+${runs} from pipeline` : undefined}
             />
             <MetricCard
                 icon={<Clock className="h-5 w-5" />}
@@ -68,6 +97,7 @@ export default function MetricsBar({ metrics }: { metrics: DashboardMetrics }) {
                 value={metrics.avgResTimeSec === '—' ? '—' : `${metrics.avgResTimeSec}s`}
                 color="text-cyber-accent"
                 delay={0.1}
+                highlight={runs > 0}
             />
             <MetricCard
                 icon={<DollarSign className="h-5 w-5" />}
@@ -75,6 +105,8 @@ export default function MetricsBar({ metrics }: { metrics: DashboardMetrics }) {
                 value={`$${metrics.totalCost}`}
                 color="text-cyber-warning"
                 delay={0.15}
+                highlight={runs > 0}
+                badge={runs > 0 ? `+$${(runs * 0.000934).toFixed(4)}` : undefined}
             />
             {metrics.mostCommonType && metrics.mostCommonType !== '—' && (
                 <MetricCard
