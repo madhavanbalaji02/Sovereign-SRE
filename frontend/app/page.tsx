@@ -548,6 +548,8 @@ export default function Dashboard() {
     const [demoShowSuccess, setDemoShowSuccess] = useState(false);
     const demoActiveRef = useRef(false);
     const approveResolverRef = useRef<(() => void) | null>(null);
+    // Accumulates across demo runs — persists even after reset
+    const [demoCompletedRuns, setDemoCompletedRuns] = useState(0);
 
     // ── Backend polling ────────────────────────────────────────────────────
     const fetchIncidents = useCallback(async () => {
@@ -711,6 +713,7 @@ export default function Dashboard() {
         add('d22', 'Senior SRE', '⏱️  Resolution time: 360,000ms (60% of anomaly duration — real GAIA data)');
         setDemoShowSuccess(true);
         setDemoState('complete');
+        setDemoCompletedRuns(prev => prev + 1);  // persists across resets
     }, [demoState]);
 
     const handleApprove = useCallback(() => {
@@ -736,35 +739,21 @@ export default function Dashboard() {
 
     // ── Metrics (real computed values) ─────────────────────────────────────
     const metrics = useMemo(() => {
-        const total = incidents.length;
-        const resolved = incidents.filter(i => i.status === 'resolved');
-        let resolvedCount = resolved.length;
-        const totalMs = resolved.reduce((s, i) => s + Number(i.resolution_time_ms ?? 0), 0);
-        let baseCost = incidents.reduce((s, i) => s + Number(i.cost_usd ?? 0), 0);
+        const base = incidents.filter(i => i.status === 'resolved');
+        const baseCostTotal = incidents.reduce((s, i) => s + Number(i.cost_usd ?? 0), 0);
+        const baseResMs = base.reduce((s, i) => s + Number(i.resolution_time_ms ?? 0), 0);
 
-        // Demo REAL-AIOPS-001: cost $0.000934, resolution 468s
+        // Each completed demo run adds one real resolved incident to the session tally
+        // REAL-AIOPS-001: $0.000934 cost, 468s resolution
         const DEMO_COST = 0.000934;
         const DEMO_RES_MS = 468000;
 
-        // When demo is running: show live pipeline activity in metrics
-        const demoIsActive = demoState === 'running' || demoState === 'waiting_approval';
-        const demoComplete = demoState === 'complete';
-
-        if (demoIsActive) {
-            // Show the in-progress run cost accruing
-            baseCost += DEMO_COST * 0.5;
-        }
-        if (demoComplete) {
-            // Demo resolved one more open incident — reflect it immediately
-            resolvedCount += 1;
-            baseCost += DEMO_COST;
-        }
-
-        const effectiveTotal = demoIsActive || demoComplete ? total : total;
-        const resolvedPct = effectiveTotal ? Math.round((resolvedCount / effectiveTotal) * 100) : 0;
-        const totalResMs = totalMs + (demoComplete ? DEMO_RES_MS : 0);
+        const resolvedCount = base.length + demoCompletedRuns;
+        const total = incidents.length;
+        const resolvedPct = total ? Math.round((resolvedCount / total) * 100) : 0;
+        const totalResMs = baseResMs + demoCompletedRuns * DEMO_RES_MS;
         const avgResTimeSec = resolvedCount ? (totalResMs / resolvedCount / 1000).toFixed(1) : '—';
-        const totalCost = baseCost.toFixed(4);
+        const totalCost = (baseCostTotal + demoCompletedRuns * DEMO_COST).toFixed(4);
 
         const typeCounts: Record<string, number> = {};
         let worstIncident = '';
@@ -778,15 +767,16 @@ export default function Dashboard() {
         const mostCommonType = Object.entries(typeCounts).sort((a, b) => b[1] - a[1])[0];
 
         return {
-            total: effectiveTotal,
+            total,
             resolvedCount,
             resolvedPct,
             avgResTimeSec,
             totalCost,
             mostCommonType: mostCommonType ? `${mostCommonType[0].replace(/_/g, ' ')} (${mostCommonType[1]})` : '—',
             worstIncident: worstIncident ? `${worstIncident} · ${worstPeak.toFixed(1)}% peak` : '—',
+            demoRuns: demoCompletedRuns,
         };
-    }, [incidents, demoState]);
+    }, [incidents, demoCompletedRuns]);
 
     const connLabel = !connectionChecked
         ? 'Checking…'

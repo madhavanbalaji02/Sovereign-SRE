@@ -11,6 +11,7 @@ export interface DashboardMetrics {
     totalCost: string;
     mostCommonType?: string;
     worstIncident?: string;
+    demoRuns?: number;
 }
 
 interface MetricCardProps {
@@ -57,7 +58,7 @@ export default function MetricsBar({ metrics }: { metrics: DashboardMetrics }) {
                 icon={<CheckCircle2 className="h-5 w-5" />}
                 label="Resolved"
                 value={String(metrics.resolvedCount)}
-                sub={`(${metrics.resolvedPct}%)`}
+                sub={`(${metrics.resolvedPct}%)${metrics.demoRuns ? ` +${metrics.demoRuns} live` : ''}`}
                 color="text-cyber-success"
                 delay={0.05}
             />
