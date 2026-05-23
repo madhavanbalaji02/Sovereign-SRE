@@ -79,3 +79,4 @@ temp/
 *.tmp
 .env.local
 frontend/.env.local
+amplify-deploy.zip
