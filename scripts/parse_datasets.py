@@ -47,6 +47,27 @@ GAIA_SOURCE_MAP = {
     "ssh": "network_delay",
 }
 
+SECRET_PATTERNS = [
+    # Lark/Feishu app_secret
+    (r'app_secret\s*=\s*\S+', 'app_secret=<REDACTED>'),
+    # Generic key/secret/token patterns in log lines
+    (r'(?i)(secret|password|token|api_key|access_key|apikey)\s*[=:]\s*\S+',
+     lambda m: m.group().split('=')[0].split(':')[0] + '=<REDACTED>'),
+    (r'Bearer\s+[A-Za-z0-9\-_\.]+', 'Bearer <REDACTED>'),
+]
+
+
+def scrub_secrets(text: str) -> str:
+    """Remove credential patterns from log lines before saving."""
+    import re as _re
+    for pattern, replacement in SECRET_PATTERNS:
+        if callable(replacement):
+            text = _re.sub(pattern, replacement, text)
+        else:
+            text = _re.sub(pattern, replacement, text)
+    return text
+
+
 BASELINES = {
     "cpu_anomaly": (35.0, 91.0),
     "memory_anomaly": (42.0, 88.0),
@@ -277,7 +298,7 @@ def parse_gaia(gaia_dir: Path) -> list[dict]:
                 "metric_baseline": defaults[0],
                 "metric_peak": defaults[1],
                 "spike_ratio": round(defaults[1] / defaults[0], 3),
-                "raw_log_line": (raw or desc)[:300],
+                "raw_log_line": scrub_secrets((raw or desc)[:300]),
                 "affected_containers": [host],
             })
 

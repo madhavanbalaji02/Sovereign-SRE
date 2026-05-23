@@ -69,9 +69,9 @@ logs/
 chroma_data/
 ollama_data/
 
-# Dataset clones (large, re-cloneable via scripts/fetch_datasets.py)
-data/gaia/
-data/aiopsarena/
+# Dataset clones + parsed output (raw logs may contain third-party credentials)
+# Re-generate with: python3 scripts/fetch_datasets.py && scripts/parse_datasets.py etc.
+data/
 
 # Temporary files
 tmp/

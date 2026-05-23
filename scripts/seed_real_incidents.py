@@ -37,15 +37,26 @@ def float_to_decimal(obj):
 
 def clear_seeded(table, source_values: list[str]) -> int:
     """Delete items where trigger_source matches seed sources."""
+    from boto3.dynamodb.conditions import Attr
     deleted = 0
     for src in source_values:
         response = table.scan(
-            FilterExpression="trigger_source = :src",
-            ExpressionAttributeValues={":src": src},
+            FilterExpression=Attr("trigger_source").eq(src),
         )
         for item in response.get("Items", []):
-            table.delete_item(Key={"incident_id": item["incident_id"]})
+            table.delete_item(Key={
+                "incident_id": item["incident_id"],
+                "timestamp": item["timestamp"],
+            })
             deleted += 1
+    # Also delete any REAL-* prefixed items from previous runs
+    resp = table.scan(FilterExpression=Attr("incident_id").begins_with("REAL-"))
+    for item in resp.get("Items", []):
+        table.delete_item(Key={
+            "incident_id": item["incident_id"],
+            "timestamp": item["timestamp"],
+        })
+        deleted += 1
     return deleted
 
 

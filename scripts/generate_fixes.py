@@ -1,12 +1,10 @@
 """
-Step 3: Generate realistic SRE root causes and code fixes for each incident.
+Step 3: Generate root causes and code fixes using Claude API (Anthropic).
 
-Uses real incident data (service names, anomaly types, metric values, durations)
-to produce service-specific root causes and unified diffs.
-
-For Bedrock/LLM: set BEDROCK_ENABLED=true and ensure Claude is approved,
-or set GROQ_API_KEY with a valid key. Falls back to high-quality programmatic
-generation grounded in the real incident data.
+Priority order:
+  1. Anthropic Claude API (ANTHROPIC_API_KEY in .env)
+  2. AWS Bedrock Claude Haiku (if approved)
+  3. Programmatic service-specific generation (always works)
 
 Reads:  data/parsed_incidents.json
 Writes: data/incidents_with_fixes.json
@@ -284,6 +282,117 @@ RESOLUTION_STEPS = {
 }
 
 
+def call_claude_api(incident: dict, api_key: str, model: str = "claude-haiku-4-5-20251001") -> dict:
+    """Generate fix using Anthropic Claude API directly."""
+    import anthropic
+
+    atype = incident["anomaly_type"]
+    fallback_diff = SERVICE_DIFFS.get((incident["service"], atype))
+    if not fallback_diff:
+        fallback_diff = DIFF_TEMPLATES.get(atype, DIFF_TEMPLATES["cpu_anomaly"])
+
+    user_prompt = f"""Real incident from AIOpsArena dataset:
+Service: {incident['service']}
+Anomaly: {atype}
+Duration: {incident['duration_seconds']}s
+CPU/Memory peak: {incident['metric_peak']}% (baseline: {incident['metric_baseline']}%)
+Severity: {incident['severity']}
+Raw log: {incident['raw_log_line'][:200]}
+
+Return ONLY valid JSON:
+{{"root_cause": "2-3 sentence technical explanation", "confidence": 0.91, "diff": "--- a/file\\n+++ b/file\\n@@ ...", "resolution_steps": ["step1","step2","step3"]}}"""
+
+    client = anthropic.Anthropic(api_key=api_key)
+    response = client.messages.create(
+        model=model,
+        max_tokens=600,
+        system=SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": user_prompt}],
+    )
+
+    text = response.content[0].text.strip()
+    if text.startswith("```"):
+        text = "\n".join(text.split("\n")[1:])
+    if text.endswith("```"):
+        text = "\n".join(text.split("\n")[:-1])
+
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        m = re.search(r'\{.*\}', text, re.DOTALL)
+        parsed = json.loads(m.group()) if m else {}
+
+    input_t = response.usage.input_tokens
+    output_t = response.usage.output_tokens
+    cost = (input_t / 1000 * INPUT_PRICE) + (output_t / 1000 * OUTPUT_PRICE)
+
+    diff = parsed.get("diff", "")
+    if not diff or len(diff) < 20:
+        diff = fallback_diff or ""
+
+    return {
+        "root_cause": parsed.get("root_cause", ""),
+        "confidence": float(parsed.get("confidence", 0.90)),
+        "diff": diff,
+        "resolution_steps": parsed.get("resolution_steps", []),
+        "bedrock_model": f"claude-haiku-4-5-20251001",
+        "tokens_used": input_t + output_t,
+        "cost_usd": round(cost, 6),
+    }
+
+
+# Fallback diff templates (used when Claude returns empty diff)
+DIFF_TEMPLATES = {
+    "cpu_anomaly": """--- a/src/processor.py
++++ b/src/processor.py
+@@ -8,5 +8,8 @@
+-    while True:
+-        items = fetch_all_pending()
+-        process_all_items(items)
++    for batch in chunked(fetch_all_pending(), size=50):
++        process_batch(batch)
++        time.sleep(0.1)""",
+    "memory_anomaly": """--- a/config/jvm.properties
++++ b/config/jvm.properties
+@@ -1,3 +1,5 @@
+-Xmx512m
+-connection.pool.size=100
++Xmx2g
++connection.pool.size=20
++connection.pool.timeout=30000""",
+    "network_delay": """--- a/config/service.yaml
++++ b/config/service.yaml
+@@ -2,4 +2,8 @@
+-  timeout: 30000
+-  retries: 0
++  timeout: 5000
++  retries: 3
++  circuitBreaker:
++    threshold: 0.5""",
+    "pod_failure": """--- a/manifests/deployment.yaml
++++ b/manifests/deployment.yaml
+@@ -10,3 +10,9 @@
+-        resources: {}
++        resources:
++          requests:
++            memory: "256Mi"
++            cpu: "250m"
++          limits:
++            memory: "512Mi"
++            cpu: "500m"
+""",
+    "disk_anomaly": """--- a/config/logrotate.conf
++++ b/config/logrotate.conf
+@@ -1,4 +1,7 @@
+-    weekly
+-    rotate 4
++    daily
++    rotate 7
++    compress
++    maxsize 100M""",
+}
+
+
 def generate_fix(inc: dict, idx: int) -> dict:
     """Generate high-quality, service-specific root cause and diff from real incident data."""
     service = inc["service"]
@@ -407,16 +516,33 @@ def main() -> None:
           f"({sum(1 for i in selected if i['source']=='aiopsarena')} AIOpsArena, "
           f"{sum(1 for i in selected if i['source']=='gaia')} GAIA)")
 
+    # Try Claude API
+    anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    use_claude = bool(anthropic_key and not anthropic_key.startswith("your_"))
+    if use_claude:
+        print(f"  ✓ Anthropic Claude API available — using claude-haiku-4-5-20251001")
+    else:
+        print(f"  ℹ No valid ANTHROPIC_API_KEY — using programmatic generation")
+
     results = []
     total_cost = 0.0
 
     for i, inc in enumerate(selected, 1):
         print(f"  [{i:02d}/{len(selected)}] {inc['service']:25s} / {inc['anomaly_type']:18s} ({inc['source']})...", end=" ", flush=True)
-        fix_data = generate_fix(inc, i)
+        fix_data = None
+        if use_claude:
+            try:
+                fix_data = call_claude_api(inc, anthropic_key)
+            except Exception as e:
+                print(f"(Claude err: {e}) ", end="", flush=True)
+        if not fix_data:
+            fix_data = generate_fix(inc, i)
         entry = {**inc, **fix_data}
         total_cost += fix_data["cost_usd"]
-        print(f"✓  conf={fix_data['confidence']:.0%}  ~${fix_data['cost_usd']:.5f}")
+        print(f"✓  conf={fix_data['confidence']:.0%}  ${fix_data['cost_usd']:.5f}")
         results.append(entry)
+        if use_claude:
+            time.sleep(0.2)  # gentle rate limit
 
     OUTPUT.write_text(json.dumps(results, indent=2))
 
