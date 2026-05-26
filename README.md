@@ -359,26 +359,6 @@ graph LR
 | Secrets | SSM | /sovereign-sre/* (7 parameters) |
 | Vector DB | RDS pgvector | sovereign-sre-db.creky0ag2sa8.us-east-2.rds.amazonaws.com |
 
-### Cost Table — 13 AWS Services
-
-| Service | Free Tier | Monthly Cost |
-|---|---|---|
-| EC2 t3.micro | 750 hrs/month (12 months) | $0 |
-| AWS Amplify | 1,000 build min + 15 GB | $0 |
-| RDS db.t3.micro | 750 hrs/month (12 months) | $0 |
-| DynamoDB | 25 GB + 25 RCU/WCU forever | $0 |
-| S3 | 5 GB free | $0 |
-| Lambda | 1M requests free | $0 |
-| Step Functions | 4K state transitions free | $0 |
-| CloudWatch | 10 alarms + 5 GB logs | $0 |
-| SNS | 1M email notifications | $0 |
-| SSM Parameter Store | Standard params free | $0 |
-| EventBridge | 1M events free | $0 |
-| Bedrock / Anthropic Claude Haiku | No free tier | ~$1 |
-| Elastic IP | Free while EC2 running | $0 |
-| **TOTAL** | | **~$1/month** |
-
-> **Cost guardrail:** Always **terminate** (not stop) EC2 — stopped instances still charge Elastic IP at $0.005/hr.
 
 ---
 
