@@ -20,8 +20,13 @@ git clone https://github.com/madhavanbalaji02/Sovereign-SRE /opt/sovereign-sre
 cd /opt/sovereign-sre
 
 # Install Python deps — AL2023 ships python3.9; we pin to python3.11
-python3.11 -m pip install --upgrade pip
-python3.11 -m pip install \
+# Use EBS-backed dir for pip temp/cache — t3.micro tmpfs (~512 MB) is too small
+# for large packages like sentence-transformers (532 MB download)
+mkdir -p /opt/pip-tmp
+export TMPDIR=/opt/pip-tmp
+
+python3.11 -m pip install --upgrade pip --no-cache-dir
+python3.11 -m pip install --no-cache-dir \
   fastapi uvicorn[standard] pydantic pydantic-settings python-dotenv \
   httpx aiofiles websockets \
   groq anthropic langchain langchain-core langchain-groq langchain-openai \
