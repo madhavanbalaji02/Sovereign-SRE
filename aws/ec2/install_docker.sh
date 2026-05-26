@@ -1,9 +1,11 @@
 #!/bin/bash
+# Targets: Amazon Linux 2023 (AL2023)
+# amazon-linux-extras is gone on AL2023 — Docker is in the standard dnf repo
 set -e
 exec > >(tee /var/log/sovereign-sre-docker.log) 2>&1
 echo "=== $(date) Installing Docker ==="
 
-amazon-linux-extras install docker -y
+dnf install -y docker
 systemctl start docker
 systemctl enable docker
 usermod -a -G docker ec2-user

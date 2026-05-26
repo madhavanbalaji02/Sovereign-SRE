@@ -1,26 +1,27 @@
 #!/bin/bash
 # Sovereign-SRE EC2 Bootstrap — runs once on first boot via EC2 UserData
+# Targets: Amazon Linux 2023 (AL2023)
 # Monitor: sudo tail -f /var/log/cloud-init-output.log
 set -e
 exec > >(tee /var/log/sovereign-sre-bootstrap.log) 2>&1
 
 echo "=== Sovereign-SRE Bootstrap starting $(date) ==="
 
-# System deps
-yum update -y
-yum install -y python3 python3-pip git nginx
+# System deps — AL2023 uses dnf (not yum; not amazon-linux-extras)
+dnf update -y
+dnf install -y python3.11 python3.11-pip git nginx
 
-# Node.js 20 via NodeSource
+# Node.js 20 via NodeSource (EL9 / AL2023 compatible)
 curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
-yum install -y nodejs
+dnf install -y nodejs
 
 # Clone repo
 git clone https://github.com/madhavanbalaji02/Sovereign-SRE /opt/sovereign-sre
 cd /opt/sovereign-sre
 
-# Install Python deps (use pip3 — Amazon Linux 2 ships python3.7/3.8)
-pip3 install --upgrade pip
-pip3 install \
+# Install Python deps — AL2023 ships python3.9; we pin to python3.11
+python3.11 -m pip install --upgrade pip
+python3.11 -m pip install \
   fastapi uvicorn[standard] pydantic pydantic-settings python-dotenv \
   httpx aiofiles websockets \
   groq anthropic langchain langchain-core langchain-groq langchain-openai \
@@ -32,7 +33,7 @@ pip3 install \
   "transformers>=4.41.0,<5.0"
 
 # Load secrets from SSM into .env
-python3 -c "
+python3.11 -c "
 import boto3, os
 region = 'us-east-2'
 ssm = boto3.client('ssm', region_name=region)
@@ -68,7 +69,7 @@ Type=simple
 User=ec2-user
 WorkingDirectory=/opt/sovereign-sre
 EnvironmentFile=/opt/sovereign-sre/.env
-ExecStart=/usr/bin/python3 -m uvicorn backend.api.main:app \
+ExecStart=/usr/bin/python3.11 -m uvicorn backend.api.main:app \
   --host 0.0.0.0 --port 8000 --workers 2
 Restart=always
 RestartSec=10
@@ -111,4 +112,9 @@ systemctl start nginx
 systemctl reload nginx
 
 echo "=== Bootstrap complete $(date) ==="
-echo "Backend: http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)/health"
+# AL2023 enforces IMDSv2 — must fetch a token before querying instance metadata
+IMDS_TOKEN=$(curl -X PUT -s "http://169.254.169.254/latest/api/token" \
+  -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+PUBLIC_IP=$(curl -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" \
+  http://169.254.169.254/latest/meta-data/public-ipv4)
+echo "Backend: http://${PUBLIC_IP}/health"
