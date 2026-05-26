@@ -110,70 +110,161 @@ python3 scripts/seed_real_incidents.py
 
 ## 🏗️ Architecture
 
-### Full System Architecture
+### System Design Overview
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         SOVEREIGN-SRE — AWS EDITION                          │
-├──────────────────────────────┬──────────────────────────────────────────────┤
-│        TRIGGER LAYER         │              DATA LAYER                       │
-│                              │                                               │
-│  CloudWatch Alarm            │  ┌─────────────┐  ┌──────────┐  ┌─────────┐ │
-│       │                      │  │  DynamoDB   │  │   RDS    │  │   S3    │ │
-│       ▼                      │  │  Incidents  │  │pgvector  │  │Artifacts│ │
-│  EventBridge Rule            │  │  REAL-AIOPS │  │  (RAG)   │  │timeseries│ │
-│       │                      │  │  + State    │  │          │  │  diffs  │ │
-│       ▼                      │  └─────────────┘  └──────────┘  └─────────┘ │
-│  Lambda Trigger              │         ▲                ▲            ▲       │
-│       │                      ├─────────┼────────────────┼────────────┼───────┤
-│       ▼                      │         │       AGENT PIPELINE        │       │
-│  Step Functions ─────────────┼─────────┤                             │       │
-│  (waitForTaskToken)          │  ┌──────┴──────────────────────────────────┐  │
-│       │                      │  │           FastAPI Backend               │  │
-│       ▼                      │  │  ┌──────────────────────────────────┐   │  │
-│  SNS Email ──────────────►   │  │  │      LangGraph State Machine     │   │  │
-│  Approve / Reject link       │  │  │                                  │   │  │
-│       │                      │  │  │  LogMonitor → RootCause → Fixer  │   │  │
-│       ▼                      │  │  │       │          │         │     │   │  │
-│  /api/approvals/{id}         │  │  │  CloudWatch   CrewAI    Claude   │   │  │
-│                              │  │  │  Logs (src)  SRE+RAG   Haiku    │   │  │
-├──────────────────────────────┤  │  └──────────────────────────────────┘   │  │
-│   REAL DATASET PIPELINE      │  └────────────────────┬────────────────────┘  │
-│                              │                       │                        │
-│  GAIA-DataSet (CloudWise)    │                       ▼                        │
-│  AIOpsArena (MicroServo)     │  ┌────────────────────────────────────────┐   │
-│       ↓                      │  │     Next.js Dashboard (Cyberpunk UI)   │   │
-│  parse → generate → seed     │  │  Sparklines · Diffs · Data Sources Tab │   │
-│  DynamoDB: REAL-AIOPS-*      │  └────────────────────────────────────────┘   │
-└──────────────────────────────┴──────────────────────────────────────────────┘
+```mermaid
+graph TB
+    classDef awsStyle fill:#FF9900,stroke:#e68a00,color:#000
+    classDef aiStyle fill:#7B2FBE,stroke:#5a1f8c,color:#fff
+    classDef dataStyle fill:#1B6B3A,stroke:#145230,color:#fff
+    classDef frontendStyle fill:#0077B6,stroke:#005f99,color:#fff
+    classDef datasetStyle fill:#C62828,stroke:#8B1A1A,color:#fff
+    classDef ragStyle fill:#2E7D32,stroke:#1B5E20,color:#fff
+
+    subgraph FRONTEND["🖥️  Frontend — AWS Amplify"]
+        DASH["Next.js 15 Dashboard<br/>Sparklines · Diffs · Analytics · Data Sources"]
+    end
+
+    subgraph TRIGGER["⚡  Event Trigger Layer"]
+        CW["☁️ CloudWatch<br/>Metric Alarms<br/>8 custom metrics"]
+        EB["🔀 EventBridge<br/>Alarm State Routing"]
+        LAM["λ Lambda<br/>sovereign-sre-remediation-trigger"]
+    end
+
+    subgraph ORCHESTRATION["🔁  Pipeline Orchestration"]
+        SF["⚙️ Step Functions<br/>waitForTaskToken<br/>durable execution"]
+        SNS["📧 SNS<br/>Email Approval Gate<br/>approve / reject links"]
+    end
+
+    subgraph AI_PIPELINE["🧠  AI Agent Pipeline — EC2 t3.micro"]
+        FAST["FastAPI Backend<br/>async Python · WebSockets · SSE"]
+        LG["LangGraph State Machine<br/>LogMonitor → RootCause → Fixer → Validator"]
+        SRE_A["👨‍💻 Senior SRE Agent<br/>Diagnosis + Confidence Scoring"]
+        RES_A["🔬 System Researcher<br/>RAG Queries + Pattern Lookup"]
+        CL["🤖 Claude Haiku<br/>Anthropic API / Amazon Bedrock<br/>RCA + unified diff generation"]
+    end
+
+    subgraph RAG_LAYER["📚  RAG Pipeline"]
+        LI["LlamaIndex<br/>code-aware chunking"]
+        PG["🐘 RDS pgvector<br/>Production Vector Store"]
+        BGE["BAAI/bge-m3<br/>Local HuggingFace Embeddings"]
+    end
+
+    subgraph DATA_LAYER["💾  Persistence Layer"]
+        DDB["DynamoDB<br/>Incident History · Agent State<br/>90-day TTL · REAL-AIOPS-001..015"]
+        S3B["S3<br/>fix.diff · timeseries.json · report.json<br/>30-day lifecycle policy"]
+        SSM["SSM Parameter Store<br/>7 secrets — keys loaded at startup"]
+    end
+
+    subgraph DATASET["📊  Real Dataset Pipeline"]
+        GAIA["GAIA-DataSet<br/>6,500+ production error logs<br/>ClickHouse · ZooKeeper · Kafka"]
+        AIOPS["AIOpsArena<br/>15 real fault injections<br/>ground-truth labels + metric CSVs"]
+        PIPE["parse → generate → seed<br/>15 incidents · $0.0114 Claude cost"]
+    end
+
+    DASH -- "REST / SSE" --> FAST
+    CW -- "alarm state change" --> EB
+    EB -- "rule match" --> LAM
+    LAM -- "StartExecution" --> SF
+    LAM -- "POST /api/pipeline/trigger" --> FAST
+    SF -- "task token" --> FAST
+    SF -- "pause + notify" --> SNS
+    SNS -- "Approve / Reject email" --> FAST
+    FAST --> LG
+    LG --> SRE_A
+    LG --> RES_A
+    SRE_A --> CL
+    RES_A --> LI
+    LI --> BGE
+    LI <--> PG
+    FAST <--> DDB
+    FAST <--> S3B
+    SSM -- "secrets" --> FAST
+    GAIA --> PIPE
+    AIOPS --> PIPE
+    PIPE -- "seed" --> DDB
+    PIPE -- "upload artifacts" --> S3B
+
+    class CW,EB,LAM,SF,SNS,DDB,S3B,SSM awsStyle
+    class SRE_A,RES_A,CL,LG aiStyle
+    class PG ragStyle
+    class BGE,LI ragStyle
+    class DASH frontendStyle
+    class GAIA,AIOPS,PIPE datasetStyle
+    class FAST aiStyle
 ```
 
-### Event Flow: Alarm → Fix → Approval → Resolved
+---
 
+### Incident Lifecycle: Alarm → Fix → Approval → Resolved
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant CW as ☁️ CloudWatch
+    participant EB as 🔀 EventBridge
+    participant L  as λ Lambda
+    participant SF as ⚙️ Step Functions
+    participant API as 🖥️ FastAPI (EC2)
+    participant LG as 🧠 LangGraph + CrewAI
+    participant RAG as 📚 pgvector RAG
+    participant CL as 🤖 Claude Haiku
+    participant SNS as 📧 SNS
+    participant Eng as 👷 Engineer
+    participant DB as 💾 DynamoDB + S3
+
+    CW->>EB: Alarm: ErrorRate > 5% (2 min window)
+    EB->>L: Route alarm state change event
+    L->>SF: StartExecution — sovereign-sre-pipeline
+    L->>API: POST /api/pipeline/trigger {alarm_reason, severity}
+
+    API->>LG: Instantiate LangGraph state machine
+    LG->>LG: LogMonitor — fetch CloudWatch log streams
+    LG->>RAG: RootCauseAnalyst — vector similarity search
+    RAG-->>LG: Top-k relevant code patterns + runbooks
+    LG->>CL: CodeFixer — generate unified diff + RCA
+    CL-->>LG: root_cause + fix.diff + confidence score
+    LG->>LG: Validator — review confidence threshold
+
+    LG->>DB: Save incident draft (status: PENDING)
+    LG->>SF: Signal waitForTaskToken
+
+    SF->>SNS: Publish approval email with diff preview
+    SNS->>Eng: Email: [Approve] / [Reject] links (1-hr TTL)
+    Eng->>API: GET /api/approvals/{id}?action=approve
+    API->>SF: SendTaskSuccess — resume execution
+
+    SF->>DB: Update incident (status: RESOLVED, fix applied)
+    SF->>S3: Upload fix.diff · timeseries.json · report.json
+    SF->>CW: PutMetricData — FixApplied, BedrockCostUSD
+    Note over API,DB: Full audit trail: cost, confidence, resolution time, diff
 ```
-1. CloudWatch detects anomaly (e.g. ErrorRate > 5 in 2 min)
-         │
-         ▼
-2. EventBridge routes alarm state change → Lambda
-         │
-         ▼
-3. Lambda starts Step Functions execution + notifies FastAPI
-         │
-         ▼
-4. LangGraph pipeline runs:
-   LogMonitor (CloudWatch Logs) → RootCauseAnalyst (CrewAI + pgvector RAG)
-         → CodeFixer (Claude Haiku) → Validator
-         │
-         ▼
-5. Step Functions pauses at waitForTaskToken → SNS sends approval email
-         │
-         ▼
-6. Engineer clicks Approve link → /api/approvals/{id}?action=approve
-         │
-         ▼
-7. Step Functions resumes → fix applied → incident saved to DynamoDB
-   diff/timeseries stored in S3 · CW metrics pushed · GitHub PR created
+
+---
+
+### Agent Pipeline — LangGraph State Machine
+
+```mermaid
+graph LR
+    START([▶ Trigger]) --> LM
+
+    subgraph SM["LangGraph State Machine"]
+        LM["📡 LogMonitor<br/>Fetch CloudWatch log streams<br/>Extract anomaly window"]
+        RC["🔍 RootCauseAnalyst<br/>CrewAI: Senior SRE + Researcher<br/>pgvector RAG lookup"]
+        CF["🔧 CodeFixer<br/>Claude Haiku<br/>Generate unified diff"]
+        VA["✅ Validator<br/>Confidence threshold check<br/>Retry or escalate"]
+    end
+
+    LM --> RC
+    RC --> CF
+    CF --> VA
+    VA -- "confidence ≥ 0.7" --> APPROVE["⏸️ Human Approval Gate<br/>SNS email + Step Functions<br/>waitForTaskToken"]
+    VA -- "confidence < 0.7" --> RC
+    APPROVE -- "approved" --> DONE([✔ Resolved])
+    APPROVE -- "rejected" --> ESC([🚨 Escalated])
 ```
+
+---
 
 ### AWS Services Map
 
