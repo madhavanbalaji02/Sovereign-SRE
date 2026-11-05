@@ -500,15 +500,30 @@ function DemoDiffPanel() {
 }
 
 // ── Demo approval card ───────────────────────────────────────────────────────
-function DemoApprovalCard({ onApprove }: { onApprove: () => void }) {
+function DemoApprovalCard({ onApprove, onReject }: { onApprove: () => void; onReject: () => void }) {
     return (
         <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="cyber-card border border-cyber-warning/50 p-4">
             <p className="font-display text-xs text-cyber-warning mb-1 tracking-widest">APPROVAL REQUIRED</p>
             <p className="text-xs text-gray-400 mb-3">Fix ready for recommendation_server.py · REAL-AIOPS-001 · Confidence: 90%</p>
             <div className="flex gap-2">
                 <button onClick={onApprove} className="flex-1 cyber-button bg-cyber-success/20 border-cyber-success text-cyber-success hover:bg-cyber-success hover:text-cyber-black text-xs py-1.5">✅ Approve Fix</button>
-                <button className="flex-1 cyber-button bg-cyber-error/20 border-cyber-error text-cyber-error text-xs py-1.5 opacity-50 cursor-default">❌ Reject</button>
+                <button onClick={onReject} className="flex-1 cyber-button bg-cyber-error/20 border-cyber-error text-cyber-error hover:bg-cyber-error hover:text-cyber-black text-xs py-1.5">❌ Reject</button>
             </div>
+        </motion.div>
+    );
+}
+
+// ── Rejected banner ──────────────────────────────────────────────────────────
+function RejectedBanner({ onReset }: { onReset: () => void }) {
+    return (
+        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="cyber-card border border-cyber-error/60 p-5 text-center bg-cyber-error/5">
+            <div className="text-4xl mb-2">🛑</div>
+            <p className="font-display text-lg text-cyber-error font-bold mb-1">Fix Rejected</p>
+            <p className="text-sm text-cyber-muted mb-1">No changes applied · No PR created</p>
+            <p className="text-xs text-cyber-muted mb-4 font-mono">Incident escalated to on-call engineer for manual remediation</p>
+            <button onClick={onReset} className="cyber-button flex items-center gap-2 mx-auto text-xs border-cyber-muted/50 text-cyber-muted hover:border-cyber-primary hover:text-cyber-primary">
+                <RotateCcw className="h-3.5 w-3.5" /> Reset Demo
+            </button>
         </motion.div>
     );
 }
@@ -549,7 +564,8 @@ export default function Dashboard() {
     const [demoShowApproval, setDemoShowApproval] = useState(false);
     const [demoShowSuccess, setDemoShowSuccess] = useState(false);
     const demoActiveRef = useRef(false);
-    const approveResolverRef = useRef<(() => void) | null>(null);
+    const [demoShowRejected, setDemoShowRejected] = useState(false);
+    const approveResolverRef = useRef<((approved: boolean) => void) | null>(null);
     // Accumulates across demo runs — persists even after reset
     const [demoCompletedRuns, setDemoCompletedRuns] = useState(0);
 
@@ -613,6 +629,7 @@ export default function Dashboard() {
         setDemoShowDiff(false);
         setDemoShowApproval(false);
         setDemoShowSuccess(false);
+        setDemoShowRejected(false);
         setIssuesDetected(0);
         setFixesProposed(0);
         setPrCreated(false);
@@ -679,8 +696,26 @@ export default function Dashboard() {
         add('d14', 'Senior SRE', '⏳ Waiting for human approval — GAIA incident duration was 600s, our SRE responded in 360s');
         setDemoShowApproval(true);
 
-        await new Promise<void>(resolve => { approveResolverRef.current = resolve; });
+        const approved = await new Promise<boolean>(resolve => { approveResolverRef.current = resolve; });
         if (!go()) return;
+
+        if (!approved) {
+            // ── After reject: abort remediation, escalate ─────────────────
+            setDemoShowApproval(false);
+            setDemoShowDiff(false);
+            setFixesProposed(0);
+            add('r1', 'Senior SRE', '❌ Fix rejected by human reviewer — discarding generated diff');
+            await sleep(800); if (!go()) return;
+            add('r2', 'Senior SRE', '🚫 No changes applied · GitHub PR not created');
+            await sleep(800); if (!go()) return;
+            add('r3', 'Senior SRE', '📟 Escalating REAL-GAIA-001 to on-call engineer for manual remediation');
+            await sleep(600); if (!go()) return;
+            setCurrentNode('idle');
+            setPipelineStatus('failed');
+            setDemoShowRejected(true);
+            setDemoState('complete');
+            return;
+        }
 
         // ── After approve: Validator ──────────────────────────────────────
         setDemoShowApproval(false);
@@ -719,13 +754,18 @@ export default function Dashboard() {
     }, [demoState]);
 
     const handleApprove = useCallback(() => {
-        approveResolverRef.current?.();
+        approveResolverRef.current?.(true);
+        approveResolverRef.current = null;
+    }, []);
+
+    const handleReject = useCallback(() => {
+        approveResolverRef.current?.(false);
         approveResolverRef.current = null;
     }, []);
 
     const resetDemo = useCallback(() => {
         demoActiveRef.current = false;
-        approveResolverRef.current?.();
+        approveResolverRef.current?.(false);
         approveResolverRef.current = null;
         setDemoState('idle');
         setPipelineStatus('idle');
@@ -734,6 +774,7 @@ export default function Dashboard() {
         setDemoShowDiff(false);
         setDemoShowApproval(false);
         setDemoShowSuccess(false);
+        setDemoShowRejected(false);
         setPrCreated(false);
         setIssuesDetected(incidents.filter(i => i.status !== 'resolved').length);
         setFixesProposed(incidents.filter(i => i.status === 'resolved').length);
@@ -902,7 +943,13 @@ export default function Dashboard() {
 
                                 <AnimatePresence>
                                     {demoShowApproval && (
-                                        <DemoApprovalCard key="approval" onApprove={handleApprove} />
+                                        <DemoApprovalCard key="approval" onApprove={handleApprove} onReject={handleReject} />
+                                    )}
+                                </AnimatePresence>
+
+                                <AnimatePresence>
+                                    {demoShowRejected && (
+                                        <RejectedBanner key="rejected" onReset={resetDemo} />
                                     )}
                                 </AnimatePresence>
 

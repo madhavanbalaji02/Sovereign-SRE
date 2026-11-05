@@ -100,21 +100,6 @@ export default function StatusPanel({
                 </div>
             </div>
 
-            {/* Approval Button */}
-            {status === 'waiting_approval' && (
-                <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="space-y-2"
-                >
-                    <button className="w-full cyber-button bg-cyber-success/20 border-cyber-success text-cyber-success hover:bg-cyber-success hover:text-cyber-black">
-                        ✓ Approve Fix
-                    </button>
-                    <button className="w-full cyber-button bg-cyber-error/20 border-cyber-error text-cyber-error hover:bg-cyber-error hover:text-cyber-black">
-                        ✗ Reject
-                    </button>
-                </motion.div>
-            )}
         </div>
     );
 }
