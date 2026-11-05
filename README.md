@@ -2,19 +2,20 @@
 
 <div align="center">
 
-![Sovereign-SRE](https://img.shields.io/badge/Sovereign-SRE-00ffff?style=for-the-badge&logo=kubernetes&logoColor=white)
+![Sovereign-SRE](https://img.shields.io/badge/Sovereign-SRE-2F6FEB?style=for-the-badge&logo=kubernetes&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![Next.js](https://img.shields.io/badge/Next.js-15-black?style=for-the-badge&logo=next.js&logoColor=white)
-![AWS](https://img.shields.io/badge/AWS-13%20Services-FF9900?style=for-the-badge&logo=amazonaws&logoColor=white)
+![AWS](https://img.shields.io/badge/AWS-14%20Services-FF9900?style=for-the-badge&logo=amazonaws&logoColor=white)
 [![Dashboard](https://img.shields.io/badge/Dashboard-AWS_Amplify-orange?style=for-the-badge&logo=amazonaws)](https://main.d2qpjzu9cicpu8.amplifyapp.com)
-[![Backend](https://img.shields.io/badge/API-EC2_t3.micro-orange?style=for-the-badge&logo=amazonaws)](http://3.149.31.90/health)
+[![Backend](https://img.shields.io/badge/API-EC2_t3.micro-orange?style=for-the-badge&logo=amazonaws)](https://main.d2qpjzu9cicpu8.amplifyapp.com/backend/health)
+[![Deploy](https://github.com/madhavanbalaji02/Sovereign-SRE/actions/workflows/deploy.yml/badge.svg)](https://github.com/madhavanbalaji02/Sovereign-SRE/actions/workflows/deploy.yml)
 [![Data](https://img.shields.io/badge/Data-Real_AIOps_Datasets-blue?style=for-the-badge&logo=databricks)](https://github.com/CloudWise-OpenSource/GAIA-DataSet)
 
 **An Autonomous Self-Healing Infrastructure System — Fully on AWS**
 
 *Detect → Diagnose → Fix → Human Approval → Deploy*
 
-[Dashboard](https://main.d2qpjzu9cicpu8.amplifyapp.com) • [API](http://3.149.31.90/health) • [Architecture](#️-architecture) • [Real Data](#-real-incident-data) • [AWS Setup](#-aws-setup)
+[Dashboard](https://main.d2qpjzu9cicpu8.amplifyapp.com) • [API](https://main.d2qpjzu9cicpu8.amplifyapp.com/backend/health) • [Architecture](#️-architecture) • [Real Data](#-real-incident-data) • [AWS Setup](#-aws-setup)
 
 </div>
 
@@ -22,7 +23,7 @@
 
 ## 🎯 Overview
 
-**Sovereign-SRE** is a production-grade autonomous SRE system that combines multi-agent AI with 13 AWS services to detect, diagnose, and propose fixes for infrastructure incidents — then pauses for a human approval via email before any change is deployed.
+**Sovereign-SRE** is a production-grade autonomous SRE system that combines multi-agent AI with 14 AWS services to detect, diagnose, and propose fixes for infrastructure incidents — then pauses for a human approval via email before any change is deployed.
 
 **What makes it real:** Every incident on the dashboard is sourced from actual production anomaly datasets (GAIA + AIOpsArena), with real metric values, real service names, real fault durations, and AI-generated root causes from Claude Haiku. No made-up numbers.
 
@@ -35,7 +36,7 @@
 - 📊 **DynamoDB + S3** — incident history, diffs, audit trail, timeseries data
 - 🚨 **CloudWatch + EventBridge + Lambda** — auto-trigger on real alarms
 - 📈 **Real Dataset Pipeline** — GAIA + AIOpsArena → parsed → AI-fixed → seeded
-- 🖥️ **Next.js Cyberpunk Dashboard** — sparkline charts, diff viewer, data attribution
+- 🖥️ **Next.js Operations Dashboard** — live demo with approve/reject, sparkline charts, diff viewer, analytics
 
 ---
 
@@ -123,6 +124,7 @@ graph TB
 
     subgraph FRONTEND["🖥️  Frontend — AWS Amplify"]
         DASH["Next.js 15 Dashboard<br/>Sparklines · Diffs · Analytics · Data Sources"]
+        CF["CloudFront<br/>HTTPS edge for the API<br/>/backend/* via Amplify rewrite"]
     end
 
     subgraph TRIGGER["⚡  Event Trigger Layer"]
@@ -162,7 +164,8 @@ graph TB
         PIPE["parse → generate → seed<br/>15 incidents · $0.0114 Claude cost"]
     end
 
-    DASH -- "REST / SSE" --> FAST
+    DASH -- "/backend/* (HTTPS)" --> CF
+    CF -- "REST / SSE" --> FAST
     CW -- "alarm state change" --> EB
     EB -- "rule match" --> LAM
     LAM -- "StartExecution" --> SF
@@ -185,7 +188,7 @@ graph TB
     PIPE -- "seed" --> DDB
     PIPE -- "upload artifacts" --> S3B
 
-    class CW,EB,LAM,SF,SNS,DDB,S3B,SSM awsStyle
+    class CW,EB,LAM,SF,SNS,DDB,S3B,SSM,CF awsStyle
     class SRE_A,RES_A,CL,LG aiStyle
     class PG ragStyle
     class BGE,LI ragStyle
@@ -283,6 +286,8 @@ graph LR
 | Artifacts | S3 | Diffs, timeseries.json, reports (30-day lifecycle) |
 | Secrets | SSM Parameter Store | API keys loaded into env at startup |
 | IAM | IAM Role | `sovereign-sre-execution-role` (least-privilege) |
+| Hosting | Amplify | Static Next.js dashboard; rewrites `/backend/*` to the API |
+| Edge | CloudFront | HTTPS in front of the EC2 API (no mixed-content errors) |
 
 ---
 
@@ -332,13 +337,14 @@ graph LR
 - S3 artifacts: `report.json`, `timeseries.json`, `fix.diff` per incident
 - Custom CloudWatch metrics: `PipelineStart`, `FixApplied`, `BedrockCostUSD`
 
-### 🖥️ Cyberpunk Dashboard
-- **3 tabs**: Dashboard · Architecture · Data Sources
-- Inline sparkline charts (recharts) with anomaly windows
-- Syntax-highlighted unified diff viewer (green adds, red removes)
-- Collapsible raw log line from the original dataset
-- Data source attribution badges linking to GitHub repos
-- Demo mode replays a real GAIA incident (real log line, real 88% memory peak)
+### 🖥️ Operations Dashboard
+- **4 tabs**: Dashboard · Architecture · Data Sources · Analytics
+- Clean dark UI (Inter + JetBrains Mono), responsive down to mobile
+- Live demo replays real incident REAL-AIOPS-001 step by step, ending in a working **Approve / Reject** decision
+- Filterable incident log (open / resolved / failed) with sparklines, root cause, fix steps and unified diffs
+- Streaming log feed replaying real GAIA + AIOpsArena log lines
+- Analytics: Bedrock spend, eval scores, token breakdown and model cost-vs-accuracy
+- Connects live to the backend; falls back to the bundled dataset if the API is unreachable
 
 ---
 
@@ -347,7 +353,7 @@ graph LR
 | Component | AWS Service | URL / Endpoint |
 |---|---|---|
 | Next.js Dashboard | AWS Amplify | https://main.d2qpjzu9cicpu8.amplifyapp.com |
-| FastAPI Backend | EC2 t3.micro | http://3.149.31.90 |
+| FastAPI Backend | EC2 t3.micro (behind CloudFront) | https://main.d2qpjzu9cicpu8.amplifyapp.com/backend/health |
 | Incident Store | DynamoDB | sovereign-sre-incidents (REAL-AIOPS-001..015) |
 | Artifact Store | S3 | sovereign-sre-artifacts-574772738370/incidents/ |
 | AI Inference | Anthropic / Bedrock | claude-haiku-4-5-20251001 |
@@ -359,6 +365,22 @@ graph LR
 | Secrets | SSM | /sovereign-sre/* (7 parameters) |
 | Vector DB | RDS pgvector | sovereign-sre-db.creky0ag2sa8.us-east-2.rds.amazonaws.com |
 
+
+---
+
+## 🔁 CI/CD
+
+GitHub Actions builds, tests and deploys on every push to `main`.
+
+| Workflow | Trigger | What it does |
+|---|---|---|
+| [`ci.yml`](.github/workflows/ci.yml) | Pull requests, and before every deploy | Frontend typecheck + static build; backend `pytest` (AWS mocked with moto) and an API `/health` smoke test |
+| [`deploy.yml`](.github/workflows/deploy.yml) | Push to `main`, or manual run | Runs CI, then deploys only what changed: **frontend** builds the static export and releases it to Amplify; **backend** runs [`scripts/ci/remote_deploy.sh`](scripts/ci/remote_deploy.sh) on EC2 over SSM (fast-forward, reinstall deps only if `requirements.txt` changed, health-checked restart). Both finish with a live smoke test. |
+| [`eval.yml`](.github/workflows/eval.yml) | Changes to agents, LLM code or the eval set | Scores the pipeline on 20 ground-truth samples with Bedrock and fails below a 0.75 composite; posts results on PRs |
+
+Deploys are serialised (one at a time). A manual **Run workflow** on `deploy.yml` redeploys both frontend and backend.
+
+Required repository secrets: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `EC2_INSTANCE_ID`.
 
 ---
 
@@ -402,7 +424,7 @@ python3 scripts/seed_real_incidents.py  # seed DynamoDB + S3
 ### 5. Run tests
 
 ```bash
-pytest tests/ -v    # 31 pass, 1 skip — all AWS calls mocked with moto
+pytest tests/test_aws -q    # 32 tests — all AWS calls mocked with moto
 ```
 
 ### 6. Fire a test incident
@@ -474,7 +496,7 @@ Sovereign-SRE/
 │   ├── generate_fixes.py       # Claude Haiku root causes + diffs
 │   ├── build_timeseries.py     # 30-point metric time series
 │   └── seed_real_incidents.py  # Seed DynamoDB + upload S3 artifacts
-├── aws/                        # AWS integration (13 services)
+├── aws/                        # AWS integration
 │   ├── config.py
 │   ├── setup.py
 │   ├── teardown.py
@@ -497,17 +519,19 @@ Sovereign-SRE/
 │   └── rag/
 │       ├── query_engine.py     # pgvector / ChromaDB retriever
 │       └── codebase_observer.py
-├── frontend/                   # Next.js 15 cyberpunk dashboard
-│   ├── app/page.tsx            # Main dashboard (3 tabs, real incidents)
+├── frontend/                   # Next.js 15 dashboard (static export on Amplify)
+│   ├── app/page.tsx            # Main dashboard (4 tabs, live demo, real incidents)
 │   └── components/
-│       ├── IncidentLog.tsx     # Incident cards with sparklines + diffs
+│       ├── IncidentLog.tsx     # Filterable incident list with sparklines + diffs
 │       ├── IncidentSparkline.tsx  # recharts LineChart component
 │       ├── MetricsBar.tsx      # Aggregate real metrics
 │       ├── DataSourcesTab.tsx  # Dataset attribution tab
 │       ├── DecisionTree.tsx
 │       ├── ThoughtStream.tsx
 │       ├── StatusPanel.tsx
-│       └── ArchitectureTab.tsx
+│       ├── ArchitectureTab.tsx
+│       ├── AnalyticsTab.tsx    # Cost, evals, model comparison
+│       └── LiveLogFeed.tsx     # Streaming log replay
 ├── data/                       # Generated locally (gitignored)
 │   ├── gaia/                   # Cloned GAIA-DataSet
 │   ├── aiopsarena/             # Cloned AIOpsArena dataset
@@ -515,7 +539,9 @@ Sovereign-SRE/
 │   └── incidents_with_fixes.json  # 15 incidents with AI fixes + timeseries
 ├── mcp_server/
 ├── hf_deploy/
-├── tests/
+├── tests/                      # pytest + moto (run in CI)
+├── scripts/ci/remote_deploy.sh # EC2 deploy step, run over SSM by GitHub Actions
+├── .github/workflows/          # ci.yml · deploy.yml · eval.yml
 └── docker-compose.yml
 ```
 
@@ -570,13 +596,13 @@ Embeddings always run **locally** via HuggingFace (`BAAI/bge-m3`) — no API key
 | Domain | Technologies |
 |---|---|
 | **Real Data Engineering** | GAIA + AIOpsArena datasets, secret scrubbing, metric normalization |
-| **Cloud Architecture** | AWS (13 services), IAM least-privilege, event-driven design |
+| **Cloud Architecture** | AWS (14 services), IAM least-privilege, event-driven design |
 | **AI/ML Engineering** | RAG pipelines, vector embeddings, multi-agent systems, LLMs |
 | **Backend** | FastAPI, async Python, WebSockets, LangGraph, CrewAI |
 | **Databases** | PostgreSQL + pgvector, DynamoDB, S3, ChromaDB |
-| **DevOps/SRE** | Incident response automation, CloudWatch observability |
+| **DevOps/SRE** | Incident response automation, CloudWatch observability, GitHub Actions CI/CD to Amplify + EC2 (SSM) |
 | **Frontend** | Next.js 15, React 19, recharts sparklines, real-time streaming |
-| **Testing** | pytest, moto (AWS mocking), 31 passing tests |
+| **Testing** | pytest, moto (AWS mocking), 32 tests gated in CI |
 
 ---
 
