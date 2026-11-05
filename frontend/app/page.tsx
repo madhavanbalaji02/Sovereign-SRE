@@ -3,9 +3,9 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-    Shield, Zap, RefreshCw, Brain, Activity, GitPullRequest,
-    Terminal, ExternalLink, RotateCcw, CheckCircle2,
-    Layers, LayoutDashboard, Database, BarChart2,
+    Shield, RefreshCw, Activity, GitPullRequest, ExternalLink, RotateCcw, CheckCircle2,
+    Layers, LayoutDashboard, Database, BarChart2, Github, Play, Loader2, Gauge, Cpu, Cloud,
+    Wallet, FileCode2, UserCheck, X, Check, XCircle, Workflow, ListChecks,
 } from 'lucide-react';
 import DecisionTree from '@/components/DecisionTree';
 import ThoughtStream from '@/components/ThoughtStream';
@@ -419,59 +419,151 @@ type PipelineStatus = 'idle' | 'running' | 'waiting_approval' | 'completed' | 'f
 type Tab = 'dashboard' | 'architecture' | 'datasources' | 'analytics';
 const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
-// ── Hero Banner ──────────────────────────────────────────────────────────────
-function HeroBanner({ onRunDemo, demoState }: { onRunDemo: () => void; demoState: DemoState }) {
+const GITHUB_URL = 'https://github.com/madhavanbalaji02/Sovereign-SRE';
+
+const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
+    { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="h-4 w-4" /> },
+    { id: 'architecture', label: 'Architecture', icon: <Layers className="h-4 w-4" /> },
+    { id: 'datasources', label: 'Data Sources', icon: <Database className="h-4 w-4" /> },
+    { id: 'analytics', label: 'Analytics', icon: <BarChart2 className="h-4 w-4" /> },
+];
+
+// ── Shared card header ───────────────────────────────────────────────────────
+function CardHeader({ icon, title, meta }: { icon: React.ReactNode; title: string; meta?: React.ReactNode }) {
     return (
-        <motion.section
-            initial={{ opacity: 0, y: -24 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="relative mb-10 rounded-xl overflow-hidden border border-cyber-primary/30 bg-gradient-to-br from-cyber-darker via-cyber-dark to-cyber-black"
-        >
-            <div className="absolute inset-0 pointer-events-none opacity-20" style={{ backgroundImage: 'linear-gradient(rgba(0,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0,255,255,0.05) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
-            <div className="relative px-8 py-10">
-                <h2 className="font-display text-2xl sm:text-3xl font-bold text-white mb-1 leading-tight max-w-3xl">
-                    Autonomous AI that{' '}
-                    <span className="text-cyber-primary text-glow-cyan">detects</span>,{' '}
-                    <span className="text-cyber-secondary" style={{ textShadow: '0 0 10px #ff00ff' }}>diagnoses</span>, and{' '}
-                    <span className="text-cyber-success" style={{ textShadow: '0 0 10px #00ff88' }}>fixes</span>{' '}
-                    infrastructure problems — then waits for your approval.
-                </h2>
-                <p className="text-sm text-cyber-muted mt-3 mb-5 max-w-2xl leading-relaxed">
-                    When a CloudWatch alarm fires, Sovereign-SRE&apos;s LangGraph agent pipeline diagnoses the root cause,
-                    generates a code fix, and emails you for approval before deploying. Incidents sourced from real
-                    GAIA + AIOpsArena datasets.
-                </p>
-                <div className="flex flex-wrap gap-3 mb-7">
-                    {[
-                        { icon: '⚡', text: '~3.4s mean time to diagnose' },
-                        { icon: '🤖', text: 'Powered by AWS Bedrock Claude Haiku' },
-                        { icon: '📊', text: 'Real data: GAIA + AIOpsArena datasets' },
-                        { icon: '☁️', text: '13 AWS services · $1/month' },
-                    ].map(({ icon, text }) => (
-                        <span key={text} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-mono border border-cyber-primary/30 bg-cyber-primary/5 text-cyber-primary">
-                            <span>{icon}</span>{text}
-                        </span>
+        <div className="mb-4 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+                <span className="text-cyber-subtle">{icon}</span>
+                <h2 className="text-sm font-semibold text-cyber-text">{title}</h2>
+            </div>
+            {meta && <div className="text-xs text-cyber-muted">{meta}</div>}
+        </div>
+    );
+}
+
+// ── Header ───────────────────────────────────────────────────────────────────
+function AppHeader({
+    activeTab, onTab, connLabel, connTone, onRefresh,
+}: {
+    activeTab: Tab; onTab: (t: Tab) => void; connLabel: string; connTone: 'live' | 'demo' | 'checking'; onRefresh: () => void;
+}) {
+    const dot = connTone === 'live' ? 'active' : connTone === 'demo' ? 'warning' : '';
+    return (
+        <header className="sticky top-0 z-40 border-b border-cyber-border bg-cyber-black/80 backdrop-blur-md">
+            <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-6 px-4 sm:px-6">
+                <a href="#" onClick={e => { e.preventDefault(); onTab('dashboard'); }} className="flex flex-shrink-0 items-center gap-2.5">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyber-primary-strong/15 ring-1 ring-cyber-primary/30">
+                        <Shield className="h-4 w-4 text-cyber-primary" />
+                    </span>
+                    <span className="text-[15px] font-semibold tracking-tight text-cyber-text">Sovereign-SRE</span>
+                </a>
+
+                <nav className="hidden h-full items-center gap-1 md:flex" aria-label="Sections">
+                    {TABS.map(tab => (
+                        <button
+                            key={tab.id}
+                            onClick={() => onTab(tab.id)}
+                            aria-current={activeTab === tab.id ? 'page' : undefined}
+                            className={`relative flex h-full items-center gap-2 px-3 text-sm transition-colors ${activeTab === tab.id ? 'text-cyber-text' : 'text-cyber-muted hover:text-cyber-text'}`}
+                        >
+                            {tab.icon}
+                            {tab.label}
+                            {activeTab === tab.id && <span className="absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-cyber-primary" />}
+                        </button>
                     ))}
-                </div>
-                <div className="flex flex-wrap gap-3">
-                    <button
-                        onClick={onRunDemo}
-                        disabled={demoState === 'running' || demoState === 'waiting_approval'}
-                        className="cyber-button flex items-center gap-2 bg-cyber-primary/10 hover:bg-cyber-primary hover:text-cyber-black transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                        <Zap className="h-4 w-4" />
-                        {demoState === 'running' || demoState === 'waiting_approval' ? 'Demo Running…' : demoState === 'complete' ? '▶ Replay Demo' : '▶ Run Live Demo'}
+                </nav>
+
+                <div className="ml-auto flex items-center gap-2">
+                    <span className="pill hidden sm:inline-flex" title={connTone === 'demo' ? 'Backend unreachable: showing bundled dataset' : undefined}>
+                        <span className={`status-dot ${dot}`} />
+                        {connLabel}
+                    </span>
+                    <button onClick={onRefresh} className="cyber-button btn-sm !px-2" aria-label="Refresh incidents" title="Refresh incidents">
+                        <RefreshCw className="h-4 w-4" />
                     </button>
-                    <a href="https://github.com/madhavanbalaji02/Sovereign-SRE" target="_blank" rel="noopener noreferrer" className="cyber-button flex items-center gap-2 border-cyber-muted/50 text-cyber-muted hover:border-cyber-primary hover:text-cyber-primary">
-                        View on GitHub <ExternalLink className="h-3.5 w-3.5" />
+                    <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer" className="cyber-button btn-sm !px-2" aria-label="GitHub repository" title="GitHub repository">
+                        <Github className="h-4 w-4" />
                     </a>
                 </div>
             </div>
+
+            {/* Mobile tabs */}
+            <nav className="flex gap-1 overflow-x-auto border-t border-cyber-border px-3 md:hidden" aria-label="Sections">
+                {TABS.map(tab => (
+                    <button
+                        key={tab.id}
+                        onClick={() => onTab(tab.id)}
+                        className={`relative flex flex-shrink-0 items-center gap-2 px-3 py-2.5 text-sm ${activeTab === tab.id ? 'text-cyber-text' : 'text-cyber-muted'}`}
+                    >
+                        {tab.icon}
+                        {tab.label}
+                        {activeTab === tab.id && <span className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-cyber-primary" />}
+                    </button>
+                ))}
+            </nav>
+        </header>
+    );
+}
+
+// ── Hero ─────────────────────────────────────────────────────────────────────
+const HERO_STATS = [
+    { icon: <Gauge className="h-4 w-4" />, value: '~3.4s', label: 'Mean time to diagnose' },
+    { icon: <Cpu className="h-4 w-4" />, value: 'Claude Haiku', label: 'via Amazon Bedrock' },
+    { icon: <Cloud className="h-4 w-4" />, value: '14', label: 'AWS services' },
+    { icon: <Wallet className="h-4 w-4" />, value: '~$9/mo', label: 'Running cost' },
+];
+
+function HeroBanner({ onRunDemo, demoState }: { onRunDemo: () => void; demoState: DemoState }) {
+    const busy = demoState === 'running' || demoState === 'waiting_approval';
+    return (
+        <motion.section
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-8 grid gap-8 pt-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-center"
+        >
+            <div>
+                <span className="pill mb-5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-cyber-primary" />
+                    Autonomous incident response on AWS
+                </span>
+                <h1 className="max-w-3xl text-balance text-3xl font-semibold leading-[1.15] tracking-tight text-cyber-text sm:text-[2.6rem]">
+                    Detect, diagnose and fix production incidents{' '}
+                    <span className="text-cyber-muted">with a human in the loop.</span>
+                </h1>
+                <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-cyber-muted">
+                    When a CloudWatch alarm fires, a LangGraph agent pipeline finds the root cause, drafts a code fix
+                    and asks an engineer to approve it before anything ships. Every incident comes from the real GAIA
+                    and AIOpsArena fault-injection datasets.
+                </p>
+                <div className="mt-7 flex flex-wrap gap-3">
+                    <button onClick={onRunDemo} disabled={busy} className="cyber-button btn-primary h-10 px-4">
+                        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : demoState === 'complete' ? <RotateCcw className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                        {busy ? 'Demo running…' : demoState === 'complete' ? 'Replay Demo' : 'Run Live Demo'}
+                    </button>
+                    <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer" className="cyber-button h-10 px-4">
+                        <Github className="h-4 w-4" />
+                        View source
+                        <ExternalLink className="h-3.5 w-3.5 text-cyber-subtle" />
+                    </a>
+                </div>
+            </div>
+
+            <dl className="grid grid-cols-2 overflow-hidden rounded-xl border border-cyber-border bg-cyber-border gap-px">
+                {HERO_STATS.map(s => (
+                    <div key={s.label} className="bg-cyber-black/95 p-5">
+                        <dt className="flex items-center gap-2 text-xs text-cyber-muted">
+                            <span className="text-cyber-subtle">{s.icon}</span>
+                            {s.label}
+                        </dt>
+                        <dd className="mt-2 text-xl font-semibold tracking-tight text-cyber-text">{s.value}</dd>
+                    </div>
+                ))}
+            </dl>
         </motion.section>
     );
 }
 
-// ── Demo diff panel (shows REAL-AIOPS-001 recommendationservice fix) ─────────
+// ── Demo diff panel (REAL-AIOPS-001 recommendationservice fix) ───────────────
 const DEMO_DIFF = `--- a/src/recommendationservice/recommendation_server.py
 +++ b/src/recommendationservice/recommendation_server.py
 @@ -18,6 +18,10 @@
@@ -486,14 +578,27 @@ const DEMO_DIFF = `--- a/src/recommendationservice/recommendation_server.py
 
 function DemoDiffPanel() {
     return (
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="cyber-card border border-cyber-accent/40 p-4">
-            <p className="font-display text-xs text-cyber-accent mb-2 tracking-widest">GENERATED CODE FIX — REAL-AIOPS-001</p>
-            <pre className="text-xs font-mono bg-cyber-black/60 rounded p-3 border border-cyber-muted/20">
-                {DEMO_DIFF.split('\n').map((line, i) => (
-                    <div key={i} className={line.startsWith('+++') ? 'text-cyber-primary' : line.startsWith('---') ? 'text-cyber-error' : line.startsWith('+') ? 'text-cyber-success' : line.startsWith('-') ? 'text-cyber-error' : line.startsWith('@@') ? 'text-cyber-accent' : 'text-gray-400'}>
-                        {line}
-                    </div>
-                ))}
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="overflow-hidden rounded-lg border border-cyber-border">
+            <div className="flex items-center justify-between border-b border-cyber-border bg-cyber-darker px-3 py-2">
+                <span className="flex items-center gap-2 text-xs font-medium text-cyber-text">
+                    <FileCode2 className="h-3.5 w-3.5 text-cyber-subtle" />
+                    recommendation_server.py
+                </span>
+                <span className="font-mono text-[11px] text-cyber-muted">
+                    <span className="text-cyber-success">+7</span> <span className="text-cyber-error">−1</span>
+                </span>
+            </div>
+            <pre className="overflow-x-auto bg-cyber-dark py-2 font-mono text-xs leading-relaxed">
+                {DEMO_DIFF.split('\n').slice(2).map((line, i) => {
+                    const tone = line.startsWith('@@')
+                        ? 'text-cyber-accent/80 bg-cyber-accent/[0.04]'
+                        : line.startsWith('+')
+                            ? 'text-cyber-success bg-cyber-success/[0.07]'
+                            : line.startsWith('-')
+                                ? 'text-cyber-error bg-cyber-error/[0.07]'
+                                : 'text-cyber-muted';
+                    return <div key={i} className={`px-3 ${tone}`}>{line || ' '}</div>;
+                })}
             </pre>
         </motion.div>
     );
@@ -502,44 +607,71 @@ function DemoDiffPanel() {
 // ── Demo approval card ───────────────────────────────────────────────────────
 function DemoApprovalCard({ onApprove, onReject }: { onApprove: () => void; onReject: () => void }) {
     return (
-        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="cyber-card border border-cyber-warning/50 p-4">
-            <p className="font-display text-xs text-cyber-warning mb-1 tracking-widest">APPROVAL REQUIRED</p>
-            <p className="text-xs text-gray-400 mb-3">Fix ready for recommendation_server.py · REAL-AIOPS-001 · Confidence: 90%</p>
-            <div className="flex gap-2">
-                <button onClick={onApprove} className="flex-1 cyber-button bg-cyber-success/20 border-cyber-success text-cyber-success hover:bg-cyber-success hover:text-cyber-black text-xs py-1.5">✅ Approve Fix</button>
-                <button onClick={onReject} className="flex-1 cyber-button bg-cyber-error/20 border-cyber-error text-cyber-error hover:bg-cyber-error hover:text-cyber-black text-xs py-1.5">❌ Reject</button>
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-4 rounded-lg border border-cyber-warning/30 bg-cyber-warning/[0.06] p-4">
+            <div className="flex items-start gap-3">
+                <UserCheck className="mt-0.5 h-4 w-4 flex-shrink-0 text-cyber-warning" />
+                <div className="min-w-0">
+                    <p className="text-sm font-medium text-cyber-text">Approval required</p>
+                    <p className="mt-0.5 text-xs leading-relaxed text-cyber-muted">
+                        Patch for <span className="font-mono text-cyber-text">recommendation_server.py</span> · REAL-AIOPS-001 · 90% confidence
+                    </p>
+                </div>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+                <button onClick={onReject} className="cyber-button btn-sm hover:!border-cyber-error/50 hover:!text-cyber-error">
+                    <X className="h-3.5 w-3.5" /> Reject
+                </button>
+                <button onClick={onApprove} className="cyber-button btn-sm btn-primary">
+                    <Check className="h-3.5 w-3.5" /> Approve Fix
+                </button>
             </div>
         </motion.div>
     );
 }
 
-// ── Rejected banner ──────────────────────────────────────────────────────────
-function RejectedBanner({ onReset }: { onReset: () => void }) {
+// ── Outcome banners ──────────────────────────────────────────────────────────
+function OutcomeBanner({ tone, icon, title, lines, onReset }: {
+    tone: 'success' | 'error'; icon: React.ReactNode; title: string; lines: string[]; onReset: () => void;
+}) {
+    const cls = tone === 'success' ? 'border-cyber-success/30 bg-cyber-success/[0.06]' : 'border-cyber-error/30 bg-cyber-error/[0.06]';
+    const iconCls = tone === 'success' ? 'text-cyber-success' : 'text-cyber-error';
     return (
-        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="cyber-card border border-cyber-error/60 p-5 text-center bg-cyber-error/5">
-            <div className="text-4xl mb-2">🛑</div>
-            <p className="font-display text-lg text-cyber-error font-bold mb-1">Fix Rejected</p>
-            <p className="text-sm text-cyber-muted mb-1">No changes applied · No PR created</p>
-            <p className="text-xs text-cyber-muted mb-4 font-mono">Incident escalated to on-call engineer for manual remediation</p>
-            <button onClick={onReset} className="cyber-button flex items-center gap-2 mx-auto text-xs border-cyber-muted/50 text-cyber-muted hover:border-cyber-primary hover:text-cyber-primary">
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className={`mt-4 rounded-lg border p-4 ${cls}`}>
+            <div className="flex items-start gap-3">
+                <span className={`mt-0.5 ${iconCls}`}>{icon}</span>
+                <div className="min-w-0">
+                    <p className="text-sm font-medium text-cyber-text">{title}</p>
+                    {lines.map(l => <p key={l} className="mt-0.5 text-xs leading-relaxed text-cyber-muted">{l}</p>)}
+                </div>
+            </div>
+            <button onClick={onReset} className="cyber-button btn-sm mt-4 w-full">
                 <RotateCcw className="h-3.5 w-3.5" /> Reset Demo
             </button>
         </motion.div>
     );
 }
 
-// ── Success banner ───────────────────────────────────────────────────────────
+function RejectedBanner({ onReset }: { onReset: () => void }) {
+    return (
+        <OutcomeBanner
+            tone="error"
+            icon={<XCircle className="h-4 w-4" />}
+            title="Fix Rejected"
+            lines={['No changes applied · No PR created', 'Escalated to the on-call engineer for manual remediation.']}
+            onReset={onReset}
+        />
+    );
+}
+
 function SuccessBanner({ onReset }: { onReset: () => void }) {
     return (
-        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="cyber-card border border-cyber-success/60 p-5 text-center bg-cyber-success/5">
-            <div className="text-4xl mb-2">🎉</div>
-            <p className="font-display text-lg text-cyber-success font-bold mb-1">Incident Auto-Resolved</p>
-            <p className="text-sm text-cyber-muted mb-1">$0.000934 · 468s · 0 human-hours</p>
-            <p className="text-xs text-cyber-muted mb-4 font-mono">REAL-AIOPS-001 · recommendationservice cpu_anomaly · 91% peak</p>
-            <button onClick={onReset} className="cyber-button flex items-center gap-2 mx-auto text-xs border-cyber-muted/50 text-cyber-muted hover:border-cyber-primary hover:text-cyber-primary">
-                <RotateCcw className="h-3.5 w-3.5" /> Reset Demo
-            </button>
-        </motion.div>
+        <OutcomeBanner
+            tone="success"
+            icon={<CheckCircle2 className="h-4 w-4" />}
+            title="Incident Auto-Resolved"
+            lines={['REAL-AIOPS-001 · recommendationservice CPU anomaly', '$0.000934 · 468s · 0 engineer-hours']}
+            onReset={onReset}
+        />
     );
 }
 
@@ -563,9 +695,9 @@ export default function Dashboard() {
     const [demoShowDiff, setDemoShowDiff] = useState(false);
     const [demoShowApproval, setDemoShowApproval] = useState(false);
     const [demoShowSuccess, setDemoShowSuccess] = useState(false);
-    const demoActiveRef = useRef(false);
     const [demoShowRejected, setDemoShowRejected] = useState(false);
     const approveResolverRef = useRef<((approved: boolean) => void) | null>(null);
+    const demoActiveRef = useRef(false);
     // Accumulates across demo runs — persists even after reset
     const [demoCompletedRuns, setDemoCompletedRuns] = useState(0);
 
@@ -617,7 +749,7 @@ export default function Dashboard() {
         setFixesProposed(incidents.filter(i => i.status === 'resolved').length);
     }, [incidents, demoState]);
 
-    // ── Demo runner — replays REAL-GAIA-001 ───────────────────────────────
+    // ── Demo runner — replays REAL-AIOPS-001 ──────────────────────────────
     const runDemo = useCallback(async () => {
         if (demoState === 'running' || demoState === 'waiting_approval') return;
 
@@ -641,59 +773,59 @@ export default function Dashboard() {
         };
         const go = () => demoActiveRef.current;
 
-        // ── t=0: Log Monitor ──────────────────────────────────────────────
+        // ── Log Monitor ───────────────────────────────────────────────────
         setCurrentNode('log_monitor');
-        add('d1', 'LogMonitor', '🔍 Replaying real incident from GAIA CloudWise dataset (2021-07-01 22:33:05 UTC)...');
+        add('d1', 'LogMonitor', 'Replaying incident REAL-AIOPS-001 from the AIOpsArena dataset (2024-06-24 05:18 UTC).');
         await sleep(1600); if (!go()) return;
 
-        add('d2', 'LogMonitor', '📊 Raw log: [memory_anomalies] trigger a high memory program, lasts 600 seconds, use 1g memory');
+        add('d2', 'LogMonitor', 'CloudWatch alarm fired: recommendationservice-cpu-anomaly-critical.');
         await sleep(1400); if (!go()) return;
 
-        add('d3', 'LogMonitor', '⚠️  Service: dbservice1 · Memory peak: 88.0% (baseline: 42.0%) · Spike ratio: 2.10x');
+        add('d3', 'LogMonitor', 'recommendationservice CPU at 91.0% against a 35.0% baseline (2.6× spike) for 780s.');
         await sleep(1000); if (!go()) return;
 
-        // ── t=4s: Root Cause Analyst ──────────────────────────────────────
+        // ── Root Cause Analyst ────────────────────────────────────────────
         setCurrentNode('root_cause_analyst');
-        add('d4', 'Senior SRE', '🧠 Querying codebase RAG for JDBC connection pool patterns...');
+        add('d4', 'Senior SRE', 'Searching the codebase index (pgvector RAG) for recommendation scoring hot paths…');
         await sleep(1800); if (!go()) return;
 
-        add('d5', 'Senior SRE', '🔎 Retrieved 5 relevant files: jvm.properties, ConnectionPool.java, DatabaseConfig.java');
+        add('d5', 'Senior SRE', 'Retrieved 5 relevant files, including recommendation_server.py and catalog_client.py.');
         await sleep(2200); if (!go()) return;
 
-        add('d6', 'Senior SRE', '💡 Root cause: Memory leak in JDBC connection pool — unclosed connections accumulating. Confidence: 91%');
+        add('d6', 'Senior SRE', 'Root cause: O(n²) cosine-similarity scoring over the full product catalog with no caching. Confidence 90%.');
         await sleep(1200); if (!go()) return;
 
-        add('d7', 'Senior SRE', '📝 Generating remediation: Xmx 512m→2g, pool size 100→20, add finally-block...');
+        add('d7', 'Senior SRE', 'Remediation plan: memoise product scores with an LRU cache and cap the catalog scan at 200 items.');
         await sleep(800); if (!go()) return;
 
-        // ── t=10s: Code Fixer ─────────────────────────────────────────────
+        // ── Code Fixer ────────────────────────────────────────────────────
         setCurrentNode('code_fixer');
         setIssuesDetected(1);
-        add('d8', 'CodeFixer', '⚙️  Invoking AWS Bedrock Claude Haiku for REAL-GAIA-001...');
+        add('d8', 'CodeFixer', 'Calling Amazon Bedrock (Claude Haiku) to generate the patch…');
         await sleep(1200); if (!go()) return;
 
-        add('d9', 'CodeFixer', '📝 Model: us.anthropic.claude-haiku-4-5-20251001-v1:0 · 847 input tokens');
+        add('d9', 'CodeFixer', 'Model us.anthropic.claude-haiku-4-5 · 687 tokens.');
         await sleep(1000); if (!go()) return;
 
-        add('d10', 'CodeFixer', '✍️  Generating unified diff for config/jvm.properties...');
+        add('d10', 'CodeFixer', 'Writing a unified diff for recommendation_server.py…');
         await sleep(2000); if (!go()) return;
 
-        add('d11', 'CodeFixer', '✅ Fix generated. Tokens: 847 | Cost: $0.000318 · Real metric: 88.0% → projected 31%');
+        add('d11', 'CodeFixer', 'Patch ready. Cost $0.000934 · projected CPU 91% → 38%.');
         setDemoShowDiff(true);
         await sleep(2500); if (!go()) return;
 
-        // ── t=18s: Human Approval ─────────────────────────────────────────
+        // ── Human Approval ────────────────────────────────────────────────
         setCurrentNode('human_approval');
         setPipelineStatus('waiting_approval');
         setDemoState('waiting_approval');
         setFixesProposed(1);
-        add('d12', 'Senior SRE', '📧 Sending approval request via Amazon SNS for REAL-GAIA-001...');
+        add('d12', 'Senior SRE', 'Publishing an approval request to Amazon SNS…');
         await sleep(800); if (!go()) return;
 
-        add('d13', 'Senior SRE', '📬 Email sent to: madbala@iu.edu');
+        add('d13', 'Senior SRE', 'Approval email delivered to the on-call engineer.');
         await sleep(600); if (!go()) return;
 
-        add('d14', 'Senior SRE', '⏳ Waiting for human approval — GAIA incident duration was 600s, our SRE responded in 360s');
+        add('d14', 'Senior SRE', 'Waiting for a human decision before anything is deployed.');
         setDemoShowApproval(true);
 
         const approved = await new Promise<boolean>(resolve => { approveResolverRef.current = resolve; });
@@ -704,11 +836,11 @@ export default function Dashboard() {
             setDemoShowApproval(false);
             setDemoShowDiff(false);
             setFixesProposed(0);
-            add('r1', 'Senior SRE', '❌ Fix rejected by human reviewer — discarding generated diff');
+            add('r1', 'Senior SRE', 'Fix rejected by the reviewer. Discarding the generated diff.');
             await sleep(800); if (!go()) return;
-            add('r2', 'Senior SRE', '🚫 No changes applied · GitHub PR not created');
+            add('r2', 'Senior SRE', 'No changes applied · GitHub PR not created.');
             await sleep(800); if (!go()) return;
-            add('r3', 'Senior SRE', '📟 Escalating REAL-GAIA-001 to on-call engineer for manual remediation');
+            add('r3', 'Senior SRE', 'Escalating REAL-AIOPS-001 to the on-call engineer for manual remediation.');
             await sleep(600); if (!go()) return;
             setCurrentNode('idle');
             setPipelineStatus('failed');
@@ -722,32 +854,29 @@ export default function Dashboard() {
         setDemoState('running');
         setPipelineStatus('running');
         setCurrentNode('validator');
-        add('d15', 'Researcher', '🧪 Validating fix against test suite...');
+        add('d15', 'Researcher', 'Running the service test suite against the patched build…');
         await sleep(1400); if (!go()) return;
 
-        add('d16', 'Researcher', '✅ 47/47 tests passing');
+        add('d16', 'Researcher', '47 of 47 tests passing.');
         await sleep(800); if (!go()) return;
 
-        add('d17', 'Researcher', '📊 Memory projection: 88.0% → 31.2% after JVM tuning applied');
+        add('d17', 'Researcher', 'Load replay: CPU 91.0% → 38.7% with the cache in place.');
         await sleep(1000); if (!go()) return;
 
-        add('d18', 'Researcher', '🔀 Creating GitHub Pull Request for jvm.properties...');
+        add('d18', 'Researcher', 'Creating GitHub Pull Request for recommendation_server.py…');
         await sleep(1800); if (!go()) return;
 
-        // ── t=28s: Complete ───────────────────────────────────────────────
+        // ── Complete ──────────────────────────────────────────────────────
         setCurrentNode('complete');
         setPipelineStatus('completed');
         setPrCreated(true);
-        add('d19', 'Senior SRE', '✅ Incident REAL-GAIA-001 resolved (2021-07-01 22:33:05 UTC)');
+        add('d19', 'Senior SRE', 'Incident REAL-AIOPS-001 resolved.');
         await sleep(600); if (!go()) return;
 
-        add('d20', 'Senior SRE', '📋 Saved to DynamoDB | Diff + timeseries stored in S3');
+        add('d20', 'Senior SRE', 'Saved to DynamoDB · diff and metric timeseries archived in S3.');
         await sleep(600); if (!go()) return;
 
-        add('d21', 'Senior SRE', '💰 Total pipeline cost: $0.000318 | Data: GAIA CloudWise dataset');
-        await sleep(400); if (!go()) return;
-
-        add('d22', 'Senior SRE', '⏱️  Resolution time: 360,000ms (60% of anomaly duration — real GAIA data)');
+        add('d21', 'Senior SRE', 'Resolution time 468s, 60% of the 780s anomaly window. Total cost $0.000934.');
         setDemoShowSuccess(true);
         setDemoState('complete');
         setDemoCompletedRuns(prev => prev + 1);  // persists across resets
@@ -821,213 +950,126 @@ export default function Dashboard() {
         };
     }, [incidents, demoCompletedRuns]);
 
-    const connLabel = !connectionChecked
-        ? 'Checking…'
-        : isConnected
+    const connTone: 'live' | 'demo' | 'checking' = !connectionChecked ? 'checking' : isConnected ? 'live' : 'demo';
+    const connLabel = connTone === 'checking'
+        ? 'Connecting…'
+        : connTone === 'live'
             ? `● Live · ${liveIncidents.length} incidents`
             : '● Demo mode';
-    const connColor = !connectionChecked
-        ? 'text-cyber-muted'
-        : isConnected
-            ? 'text-cyber-success'
-            : 'text-cyber-warning';
 
     return (
-        <div className="min-h-screen p-4 sm:p-6 max-w-[1400px] mx-auto">
+        <div className="min-h-screen">
+            <AppHeader
+                activeTab={activeTab}
+                onTab={setActiveTab}
+                connLabel={connLabel.replace('● ', '')}
+                connTone={connTone}
+                onRefresh={fetchIncidents}
+            />
+            {/* Screen-reader + test hook for connection state */}
+            <span className="sr-only">{connLabel}</span>
 
-            {/* ── Header ──────────────────────────────────────────────── */}
-            <motion.header initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
-                <div className="flex items-center justify-between flex-wrap gap-3">
-                    <div className="flex items-center gap-3">
-                        <div className="relative">
-                            <Shield className="h-9 w-9 text-cyber-primary" />
-                            <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-cyber-success rounded-full animate-pulse" />
-                        </div>
-                        <div>
-                            <h1 className="text-xl font-display font-bold text-cyber-primary text-glow-cyan">SOVEREIGN-SRE</h1>
-                            <p className="text-xs text-cyber-muted">Autonomous Self-Healing Infrastructure — AWS Edition</p>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                        <span className={`text-xs font-mono ${connColor}`}>{connLabel}</span>
-                        <button onClick={fetchIncidents} className="cyber-button flex items-center gap-1.5 text-xs px-2.5 py-1.5">
-                            <RefreshCw className="h-3 w-3" /> Refresh
-                        </button>
-                    </div>
-                </div>
-            </motion.header>
+            <main className="mx-auto max-w-[1400px] px-4 pb-16 sm:px-6">
+                {/* ── Dashboard Tab ───────────────────────────────────────── */}
+                {activeTab === 'dashboard' && (
+                    <>
+                        <HeroBanner onRunDemo={runDemo} demoState={demoState} />
 
-            {/* ── Hero Banner ─────────────────────────────────────────── */}
-            <HeroBanner onRunDemo={runDemo} demoState={demoState} />
-
-            {/* ── Tab Navigation ──────────────────────────────────────── */}
-            <div className="flex gap-1 mb-6 border-b border-cyber-muted/20 pb-px">
-                {([
-                    { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="h-4 w-4" /> },
-                    { id: 'architecture', label: 'Architecture', icon: <Layers className="h-4 w-4" /> },
-                    { id: 'datasources', label: 'Data Sources', icon: <Database className="h-4 w-4" /> },
-                    { id: 'analytics', label: 'Analytics', icon: <BarChart2 className="h-4 w-4" /> },
-                ] as { id: Tab; label: string; icon: React.ReactNode }[]).map(tab => (
-                    <button
-                        key={tab.id}
-                        onClick={() => setActiveTab(tab.id)}
-                        className={`flex items-center gap-2 px-4 py-2 text-sm font-display transition-all border-b-2 -mb-px ${activeTab === tab.id
-                            ? 'border-cyber-primary text-cyber-primary'
-                            : 'border-transparent text-cyber-muted hover:text-cyber-primary/70'
-                            }`}
-                    >
-                        {tab.icon}
-                        {tab.label}
-                    </button>
-                ))}
-            </div>
-
-            {/* ── Dashboard Tab ───────────────────────────────────────── */}
-            {activeTab === 'dashboard' && (
-                <>
-                    {/* Agent panels grid */}
-                    <div className="grid grid-cols-12 gap-4 mb-6">
-                        <motion.div
-                            initial={{ opacity: 0, x: -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: 0.05 }}
-                            className="col-span-12 lg:col-span-4"
-                        >
-                            <div className="cyber-card p-5 h-full">
-                                <div className="flex items-center gap-2 mb-4">
-                                    <Brain className="h-5 w-5 text-cyber-secondary" />
-                                    <h2 className="font-display text-base text-cyber-secondary">Agent Pipeline</h2>
-                                </div>
-                                <DecisionTree currentNode={currentNode} />
+                        <div className="mb-3 flex items-end justify-between">
+                            <div>
+                                <h2 className="text-base font-semibold text-cyber-text">Live pipeline</h2>
+                                <p className="text-sm text-cyber-muted">Each agent in the LangGraph workflow, step by step.</p>
                             </div>
-                        </motion.div>
+                        </div>
 
-                        <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.1 }}
-                            className="col-span-12 lg:col-span-5"
-                        >
-                            <div className="cyber-card p-5 h-full flex flex-col gap-4">
-                                <div className="flex items-center gap-2">
-                                    <Activity className="h-5 w-5 text-cyber-primary" />
-                                    <h2 className="font-display text-base text-cyber-primary">Agent Thoughts</h2>
-                                </div>
+                        <div className="mb-8 grid grid-cols-12 gap-4">
+                            <section className="cyber-card col-span-12 p-5 md:col-span-6 lg:col-span-3">
+                                <CardHeader icon={<Workflow className="h-4 w-4" />} title="Agent Pipeline" />
+                                <DecisionTree currentNode={currentNode} />
+                            </section>
+
+                            <section className="cyber-card col-span-12 flex flex-col p-5 lg:col-span-6 lg:order-none order-last">
+                                <CardHeader
+                                    icon={<Activity className="h-4 w-4" />}
+                                    title="Agent Thoughts"
+                                    meta={thoughts.length > 0 ? `${thoughts.length} events` : undefined}
+                                />
                                 <ThoughtStream thoughts={thoughts} />
-
                                 <AnimatePresence>
                                     {demoShowDiff && !demoShowSuccess && (
-                                        <DemoDiffPanel key="diff" />
+                                        <div className="mt-4" key="diff"><DemoDiffPanel /></div>
                                     )}
                                 </AnimatePresence>
-                            </div>
-                        </motion.div>
+                            </section>
 
-                        <motion.div
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: 0.15 }}
-                            className="col-span-12 lg:col-span-3"
-                        >
-                            <div className="cyber-card p-5 h-full flex flex-col gap-4">
-                                <div className="flex items-center gap-2">
-                                    <GitPullRequest className="h-5 w-5 text-cyber-success" />
-                                    <h2 className="font-display text-base text-cyber-success">Status</h2>
-                                </div>
+                            <section className="cyber-card col-span-12 p-5 md:col-span-6 lg:col-span-3">
+                                <CardHeader icon={<GitPullRequest className="h-4 w-4" />} title="Status" />
                                 <StatusPanel
                                     status={pipelineStatus}
                                     issuesDetected={issuesDetected}
                                     fixesProposed={fixesProposed}
                                     prCreated={prCreated}
                                 />
-
                                 <AnimatePresence>
                                     {demoShowApproval && (
                                         <DemoApprovalCard key="approval" onApprove={handleApprove} onReject={handleReject} />
                                     )}
                                 </AnimatePresence>
-
                                 <AnimatePresence>
-                                    {demoShowRejected && (
-                                        <RejectedBanner key="rejected" onReset={resetDemo} />
-                                    )}
+                                    {demoShowRejected && <RejectedBanner key="rejected" onReset={resetDemo} />}
                                 </AnimatePresence>
-
                                 <AnimatePresence>
-                                    {demoShowSuccess && (
-                                        <SuccessBanner key="success" onReset={resetDemo} />
-                                    )}
+                                    {demoShowSuccess && <SuccessBanner key="success" onReset={resetDemo} />}
                                 </AnimatePresence>
+                            </section>
+                        </div>
+
+                        <div className="mb-3">
+                            <h2 className="text-base font-semibold text-cyber-text">Incident overview</h2>
+                            <p className="text-sm text-cyber-muted">
+                                {isConnected ? 'Live from DynamoDB via the FastAPI backend.' : 'Bundled GAIA + AIOpsArena dataset (backend unreachable).'}
+                            </p>
+                        </div>
+
+                        <div className="mb-4">
+                            <MetricsBar metrics={metrics} />
+                        </div>
+
+                        <div className="grid grid-cols-12 gap-4">
+                            <div className="col-span-12 lg:col-span-5">
+                                <LiveLogFeed />
                             </div>
-                        </motion.div>
-                    </div>
 
-                    {/* Metrics bar */}
-                    <MetricsBar metrics={metrics} />
+                            <section className="cyber-card col-span-12 p-5 lg:col-span-7">
+                                <CardHeader
+                                    icon={<ListChecks className="h-4 w-4" />}
+                                    title="Incident Log"
+                                    meta={isConnected ? 'Live' : 'Dataset'}
+                                />
+                                <IncidentLog incidents={incidents} />
+                            </section>
+                        </div>
+                    </>
+                )}
 
-                    {/* Data provenance note */}
-                    <p className="text-xs text-cyber-muted mb-4 font-mono">
-                        Incidents sourced from GAIA (CloudWise, 2021) and AIOpsArena real microservice fault injection datasets.
-                        Most common: {metrics.mostCommonType} · Worst: {metrics.worstIncident}
-                    </p>
+                {/* ── Other tabs ───────────────────────────────────────────── */}
+                {activeTab !== 'dashboard' && (
+                    <motion.div key={activeTab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="pt-8">
+                        {activeTab === 'architecture' && <ArchitectureTab />}
+                        {activeTab === 'datasources' && <DataSourcesTab totalBedrockCost={metrics.totalCost} />}
+                        {activeTab === 'analytics' && <AnalyticsTab />}
+                    </motion.div>
+                )}
+            </main>
 
-                    {/* Live Log Feed + Incident log side-by-side on wide screens */}
-                    <div className="grid grid-cols-12 gap-4 mb-4">
-                        <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.18 }}
-                            className="col-span-12 lg:col-span-5"
-                        >
-                            <LiveLogFeed />
-                        </motion.div>
-
-                        <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.2 }}
-                            className="col-span-12 lg:col-span-7 cyber-card p-5"
-                        >
-                            <div className="flex items-center justify-between mb-4">
-                                <div className="flex items-center gap-2">
-                                    <Terminal className="h-5 w-5 text-cyber-accent" />
-                                    <h2 className="font-display text-base text-cyber-accent">Incident Log</h2>
-                                    <span className="text-xs text-cyber-muted font-mono ml-2">
-                                        {isConnected ? 'live data' : 'GAIA + AIOpsArena dataset'}
-                                    </span>
-                                </div>
-                                <span className="text-xs text-cyber-muted">{incidents.length} incidents</span>
-                            </div>
-                            <IncidentLog incidents={incidents} />
-                        </motion.div>
-                    </div>
-                </>
-            )}
-
-            {/* ── Architecture Tab ─────────────────────────────────────── */}
-            {activeTab === 'architecture' && (
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="cyber-card p-6"
-                >
-                    <ArchitectureTab />
-                </motion.div>
-            )}
-
-            {/* ── Data Sources Tab ─────────────────────────────────────── */}
-            {activeTab === 'datasources' && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="cyber-card p-6">
-                    <DataSourcesTab totalBedrockCost={metrics.totalCost} />
-                </motion.div>
-            )}
-
-            {/* ── Analytics Tab ────────────────────────────────────────── */}
-            {activeTab === 'analytics' && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                    <AnalyticsTab />
-                </motion.div>
-            )}
+            <footer className="border-t border-cyber-border">
+                <div className="mx-auto flex max-w-[1400px] flex-col gap-2 px-4 py-6 text-xs text-cyber-muted sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                    <span>Sovereign-SRE · Incidents from GAIA (CloudWise) and AIOpsArena fault-injection datasets.</span>
+                    <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 hover:text-cyber-text">
+                        <Github className="h-3.5 w-3.5" /> Source on GitHub
+                    </a>
+                </div>
+            </footer>
         </div>
     );
 }

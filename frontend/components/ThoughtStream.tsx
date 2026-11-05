@@ -1,7 +1,8 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, Brain, Search, Wrench } from 'lucide-react';
+import { Bot, Brain, Search, Wrench, PlayCircle } from 'lucide-react';
 
 interface Thought {
     id: string;
@@ -14,91 +15,77 @@ interface ThoughtStreamProps {
     thoughts: Thought[];
 }
 
-const agentIcons: Record<string, React.ReactNode> = {
-    'LogMonitor': <Search className="h-4 w-4" />,
-    'Senior SRE': <Brain className="h-4 w-4" />,
-    'Researcher': <Bot className="h-4 w-4" />,
-    'CodeFixer': <Wrench className="h-4 w-4" />,
+const AGENTS: Record<string, { icon: React.ReactNode; tone: string }> = {
+    'LogMonitor': { icon: <Search className="h-3.5 w-3.5" />, tone: 'text-cyber-accent bg-cyber-accent/10 ring-cyber-accent/25' },
+    'Senior SRE': { icon: <Brain className="h-3.5 w-3.5" />, tone: 'text-cyber-secondary bg-cyber-secondary/10 ring-cyber-secondary/25' },
+    'Researcher': { icon: <Bot className="h-3.5 w-3.5" />, tone: 'text-cyber-primary bg-cyber-primary/10 ring-cyber-primary/25' },
+    'CodeFixer': { icon: <Wrench className="h-3.5 w-3.5" />, tone: 'text-cyber-success bg-cyber-success/10 ring-cyber-success/25' },
 };
 
-const agentColors: Record<string, string> = {
-    'LogMonitor': 'text-cyber-accent border-cyber-accent/30 bg-cyber-accent/5',
-    'Senior SRE': 'text-cyber-secondary border-cyber-secondary/30 bg-cyber-secondary/5',
-    'Researcher': 'text-cyber-primary border-cyber-primary/30 bg-cyber-primary/5',
-    'CodeFixer': 'text-cyber-success border-cyber-success/30 bg-cyber-success/5',
+const formatTime = (timestamp: string) => {
+    try {
+        return new Date(timestamp).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    } catch {
+        return '--:--:--';
+    }
 };
 
 export default function ThoughtStream({ thoughts }: ThoughtStreamProps) {
-    const formatTime = (timestamp: string) => {
-        try {
-            return new Date(timestamp).toLocaleTimeString('en-US', {
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-            });
-        } catch {
-            return '--:--:--';
-        }
-    };
+    const scrollRef = useRef<HTMLDivElement>(null);
+
+    // Keep the newest message in view as the pipeline progresses
+    useEffect(() => {
+        const el = scrollRef.current;
+        if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    }, [thoughts.length]);
+
+    if (thoughts.length === 0) {
+        return (
+            <div className="flex flex-1 flex-col items-center justify-center rounded-lg border border-dashed border-cyber-border py-12 text-center">
+                <PlayCircle className="mb-3 h-8 w-8 text-cyber-subtle" />
+                <p className="text-sm font-medium text-cyber-text">No agent activity yet</p>
+                <p className="mt-1 max-w-[16rem] text-xs text-cyber-muted">
+                    Run the live demo to watch each agent reason through a real incident.
+                </p>
+            </div>
+        );
+    }
 
     return (
-        <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
-            <AnimatePresence>
-                {thoughts.map((thought, index) => {
-                    const color = agentColors[thought.agent] || 'text-cyber-muted border-cyber-muted/30';
-                    const icon = agentIcons[thought.agent] || <Bot className="h-4 w-4" />;
-
-                    return (
-                        <motion.div
-                            key={thought.id}
-                            initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
-                            transition={{ delay: index * 0.05 }}
-                            className={`p-4 rounded-lg border ${color}`}
-                        >
-                            {/* Header */}
-                            <div className="flex items-center justify-between mb-2">
-                                <div className="flex items-center gap-2">
-                                    {icon}
-                                    <span className="font-display text-sm font-semibold">
-                                        {thought.agent}
-                                    </span>
-                                </div>
-                                <span className="text-xs opacity-50 font-mono">
-                                    {formatTime(thought.timestamp)}
+        <div ref={scrollRef} className="max-h-[26rem] overflow-y-auto pr-1">
+            <ol className="relative space-y-0.5">
+                <AnimatePresence initial={false}>
+                    {thoughts.map((thought, index) => {
+                        const agent = AGENTS[thought.agent] ?? { icon: <Bot className="h-3.5 w-3.5" />, tone: 'text-cyber-muted bg-white/5 ring-white/10' };
+                        const isLatest = index === thoughts.length - 1;
+                        return (
+                            <motion.li
+                                key={thought.id}
+                                initial={{ opacity: 0, y: 6 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.2 }}
+                                className="relative flex gap-3 rounded-lg px-2 py-2 hover:bg-white/[0.02]"
+                            >
+                                {index < thoughts.length - 1 && (
+                                    <span className="absolute left-[1.3rem] top-9 bottom-[-0.25rem] w-px bg-cyber-border" aria-hidden />
+                                )}
+                                <span className={`relative z-10 mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full ring-1 ${agent.tone}`}>
+                                    {agent.icon}
                                 </span>
-                            </div>
-
-                            {/* Thought content */}
-                            <div className="terminal-text opacity-90">
-                                <span className="text-cyber-muted mr-2">&gt;</span>
-                                {thought.thought}
-                            </div>
-
-                            {/* Typing indicator for latest thought */}
-                            {index === thoughts.length - 1 && (
-                                <motion.div
-                                    className="flex gap-1 mt-2"
-                                    animate={{ opacity: [0.3, 1, 0.3] }}
-                                    transition={{ repeat: Infinity, duration: 1.5 }}
-                                >
-                                    <span className="w-2 h-2 bg-current rounded-full" />
-                                    <span className="w-2 h-2 bg-current rounded-full" style={{ animationDelay: '0.2s' }} />
-                                    <span className="w-2 h-2 bg-current rounded-full" style={{ animationDelay: '0.4s' }} />
-                                </motion.div>
-                            )}
-                        </motion.div>
-                    );
-                })}
-            </AnimatePresence>
-
-            {thoughts.length === 0 && (
-                <div className="text-center py-8 text-cyber-muted">
-                    <Bot className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p className="text-sm">Waiting for agent activity...</p>
-                </div>
-            )}
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex items-baseline justify-between gap-2">
+                                        <span className="text-xs font-semibold text-cyber-text">{thought.agent}</span>
+                                        <span className="font-mono text-[11px] text-cyber-subtle tabular">{formatTime(thought.timestamp)}</span>
+                                    </div>
+                                    <p className={`mt-0.5 text-[13px] leading-relaxed ${isLatest ? 'text-cyber-text' : 'text-cyber-muted'}`}>
+                                        {thought.thought}
+                                    </p>
+                                </div>
+                            </motion.li>
+                        );
+                    })}
+                </AnimatePresence>
+            </ol>
         </div>
     );
 }

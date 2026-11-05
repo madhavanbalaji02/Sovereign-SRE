@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Terminal, Zap, Activity, Wifi, WifiOff } from 'lucide-react';
+import { Terminal, Activity, Pause, Play } from 'lucide-react';
 
 interface LogLine {
     id: number;
@@ -40,17 +40,12 @@ const REAL_GAIA_LOGS: Omit<LogLine, 'id' | 'timestamp'>[] = [
     { service: 'frontend',               level: 'WARNING', is_anomaly: true,  anomaly_type: 'network_delay',  source: 'AIOpsArena', message: 'Envoy: 30% packet loss detected — no circuit breaker configured' },
 ];
 
-const LEVEL_COLOR: Record<string, string> = {
-    ERROR:    'text-red-400',
-    CRITICAL: 'text-red-500',
-    WARNING:  'text-yellow-400',
-    INFO:     'text-emerald-700',
-    DEBUG:    'text-gray-600',
-};
-
-const SOURCE_COLOR: Record<string, string> = {
-    'GAIA':       'text-cyan-600',
-    'AIOpsArena': 'text-purple-500',
+const LEVEL_STYLE: Record<string, string> = {
+    ERROR: 'text-cyber-error',
+    CRITICAL: 'text-cyber-error',
+    WARNING: 'text-cyber-warning',
+    INFO: 'text-cyber-subtle',
+    DEBUG: 'text-cyber-subtle',
 };
 
 function now(): string {
@@ -59,16 +54,16 @@ function now(): string {
 
 export default function LiveLogFeed() {
     const [logs, setLogs] = useState<LogLine[]>([]);
-    const [anomalyFlash, setAnomalyFlash] = useState(false);
     const [linesProcessed, setLinesProcessed] = useState(0);
     const [anomaliesDetected, setAnomaliesDetected] = useState(0);
+    const [paused, setPaused] = useState(false);
+    const pausedRef = useRef(false);
     const scrollRef = useRef<HTMLDivElement>(null);
     const idxRef = useRef(0);
     const counterRef = useRef({ total: 0, anomalies: 0 });
 
-    // Replay real GAIA logs at ~1 line per 1.5s, filtering ~70% as "normal"
+    // Replay real GAIA + AIOpsArena log lines at ~1 line per 1.5s
     useEffect(() => {
-        // Seed initial burst of 8 lines
         const seed: LogLine[] = [];
         for (let i = 0; i < 8; i++) {
             const entry = REAL_GAIA_LOGS[i % REAL_GAIA_LOGS.length];
@@ -82,121 +77,78 @@ export default function LiveLogFeed() {
         idxRef.current = 8;
 
         const interval = setInterval(() => {
+            if (pausedRef.current) return;
             const entry = REAL_GAIA_LOGS[idxRef.current % REAL_GAIA_LOGS.length];
             idxRef.current++;
             counterRef.current.total++;
             if (entry.is_anomaly) counterRef.current.anomalies++;
-
-            const line: LogLine = {
-                ...entry,
-                id: idxRef.current,
-                timestamp: now(),
-            };
-
-            setLogs(prev => [...prev.slice(-49), line]);
+            setLogs(prev => [...prev.slice(-49), { ...entry, id: idxRef.current, timestamp: now() }]);
             setLinesProcessed(counterRef.current.total);
             setAnomaliesDetected(counterRef.current.anomalies);
-
-            if (line.is_anomaly) {
-                setAnomalyFlash(true);
-                setTimeout(() => setAnomalyFlash(false), 1200);
-            }
         }, 1500);
 
         return () => clearInterval(interval);
     }, []);
 
-    // Auto-scroll to bottom
+    // Auto-scroll the log pane (not the page) to the newest line
     useEffect(() => {
-        if (scrollRef.current) {
-            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-        }
+        if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }, [logs]);
 
-    const filtered = Math.max(0, linesProcessed * 3 - linesProcessed); // simulated 75% filtered
-    const savingsPct = 72;
+    const togglePause = () => {
+        pausedRef.current = !pausedRef.current;
+        setPaused(pausedRef.current);
+    };
 
     return (
-        <div className="cyber-card p-4 h-full flex flex-col relative">
-            {/* Anomaly flash border */}
-            <AnimatePresence>
-                {anomalyFlash && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="absolute inset-0 rounded pointer-events-none z-10 border-2 border-red-500/60"
-                        style={{ boxShadow: '0 0 12px rgba(255,50,50,0.3)' }}
-                    />
-                )}
-            </AnimatePresence>
-
-            {/* Header */}
-            <div className="flex items-center justify-between mb-2 flex-shrink-0">
+        <section className="cyber-card flex h-full flex-col p-5">
+            <div className="mb-4 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                    <Terminal className="h-4 w-4 text-cyber-accent" />
-                    <span className="font-display text-xs text-cyber-accent tracking-wider">GAIA LOG STREAM</span>
-                    <motion.span
-                        animate={{ opacity: [1, 0.4, 1] }}
-                        transition={{ repeat: Infinity, duration: 1.5 }}
-                        className="w-1.5 h-1.5 rounded-full bg-cyber-success"
-                    />
+                    <Terminal className="h-4 w-4 text-cyber-subtle" />
+                    <h2 className="text-sm font-semibold text-cyber-text">Log Stream</h2>
+                    <span className={`ml-1 inline-flex items-center gap-1.5 text-[11px] font-medium ${paused ? 'text-cyber-muted' : 'text-cyber-success'}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${paused ? 'bg-cyber-subtle' : 'bg-cyber-success animate-pulse'}`} />
+                        {paused ? 'Paused' : 'Streaming'}
+                    </span>
                 </div>
-                <div className="flex items-center gap-3 text-xs font-mono text-cyber-muted">
-                    <span>{linesProcessed} lines</span>
-                    <span className="text-red-400">{anomaliesDetected} anomalies</span>
-                    <span className="text-emerald-700">{savingsPct}% filtered</span>
-                </div>
+                <button onClick={togglePause} className="cyber-button btn-sm !h-7 !px-2" aria-label={paused ? 'Resume stream' : 'Pause stream'} title={paused ? 'Resume' : 'Pause'}>
+                    {paused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
+                </button>
             </div>
 
-            {/* Log lines */}
+            <div className="relative min-h-[220px] flex-1">
             <div
                 ref={scrollRef}
-                className="flex-1 overflow-y-auto font-mono text-xs space-y-0.5 bg-cyber-black/70 rounded border border-cyber-muted/10 p-2"
-                style={{ minHeight: 200, maxHeight: 280 }}
+                className="h-[420px] overflow-y-auto rounded-lg border border-cyber-border bg-cyber-dark py-1.5 font-mono text-[11.5px] lg:absolute lg:inset-0 lg:h-auto"
+                role="log"
+                aria-live="off"
             >
                 <AnimatePresence initial={false}>
-                    {logs.map((log) => (
+                    {logs.map(log => (
                         <motion.div
                             key={log.id}
-                            initial={{ opacity: 0, x: -8 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ duration: 0.15 }}
-                            className={`flex gap-1.5 leading-5 ${log.is_anomaly ? 'bg-red-950/20 rounded px-1' : ''}`}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ duration: 0.2 }}
+                            className={`grid grid-cols-[4.25rem_3.75rem_minmax(0,1fr)] gap-x-2 sm:grid-cols-[4.25rem_3.75rem_minmax(0,8rem)_minmax(0,1fr)] border-l-2 px-3 py-[3px] leading-5 ${log.is_anomaly ? 'border-cyber-error/70 bg-cyber-error/[0.05]' : 'border-transparent'}`}
+                            title={`${log.source} · ${log.message}`}
                         >
-                            <span className="text-gray-600 flex-shrink-0 text-right w-[42px]">
-                                {log.timestamp.slice(11, 19)}
-                            </span>
-                            <span className={`flex-shrink-0 w-[52px] ${LEVEL_COLOR[log.level] ?? 'text-gray-500'}`}>
-                                {log.level}
-                            </span>
-                            <span className="text-cyber-secondary flex-shrink-0 w-[120px] truncate">
-                                {log.service}
-                            </span>
-                            <span className="text-gray-400 truncate flex-1 min-w-0">
-                                {log.message}
-                            </span>
-                            <span className={`flex-shrink-0 text-xs ${SOURCE_COLOR[log.source ?? ''] ?? 'text-gray-600'}`}>
-                                {log.source}
-                            </span>
-                            {log.is_anomaly && (
-                                <span className="flex-shrink-0 text-red-400">⚠</span>
-                            )}
+                            <span className="text-cyber-subtle tabular">{log.timestamp.slice(11, 19)}</span>
+                            <span className={LEVEL_STYLE[log.level] ?? 'text-cyber-subtle'}>{log.level}</span>
+                            <span className="hidden truncate text-cyber-accent/80 sm:block">{log.service}</span>
+                            <span className="truncate text-cyber-muted">{log.message}</span>
                         </motion.div>
                     ))}
                 </AnimatePresence>
             </div>
-
-            {/* Footer */}
-            <div className="mt-2 flex gap-4 text-xs text-cyber-muted font-mono flex-shrink-0">
-                <span className="flex items-center gap-1">
-                    <Activity className="h-3 w-3" />
-                    {linesProcessed} processed
-                </span>
-                <span className="text-red-400">{anomaliesDetected} anomalies</span>
-                <span className="text-emerald-700">{savingsPct}% token savings via normalization</span>
-                <span className="ml-auto text-gray-600">GAIA + AIOpsArena</span>
             </div>
-        </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-cyber-muted">
+                <span className="flex items-center gap-1.5"><Activity className="h-3.5 w-3.5 text-cyber-subtle" /><span className="text-cyber-text tabular">{linesProcessed}</span> processed</span>
+                <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-cyber-error" /><span className="text-cyber-text tabular">{anomaliesDetected}</span> anomalies</span>
+                <span>72% token savings via normalisation</span>
+                <span className="ml-auto text-cyber-subtle">GAIA + AIOpsArena replay</span>
+            </div>
+        </section>
     );
 }

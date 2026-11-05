@@ -1,20 +1,25 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
+import { Inter, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 
+const sans = Inter({ subsets: ['latin'], variable: '--font-sans', display: 'swap' });
+const mono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-mono', display: 'swap' });
+
 export const metadata: Metadata = {
-    title: 'Sovereign-SRE | Self-Healing Infrastructure',
-    description: 'Autonomous SRE system that detects, diagnoses, and fixes infrastructure issues',
-    keywords: ['SRE', 'DevOps', 'AI', 'Automation', 'Infrastructure'],
+    title: 'Sovereign-SRE · Autonomous incident response',
+    description:
+        'An AI agent pipeline on AWS that detects anomalies, diagnoses root causes, proposes code fixes and waits for human approval.',
+    keywords: ['SRE', 'DevOps', 'AIOps', 'AWS Bedrock', 'LangGraph', 'Incident response'],
 };
 
-export default function RootLayout({
-    children,
-}: {
-    children: React.ReactNode;
-}) {
+export const viewport: Viewport = {
+    themeColor: '#0A0C10',
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
     return (
-        <html lang="en" className="dark" suppressHydrationWarning>
-            <body className="min-h-screen bg-cyber-black antialiased" suppressHydrationWarning>
+        <html lang="en" className={`dark ${sans.variable} ${mono.variable}`} suppressHydrationWarning>
+            <body className="min-h-screen bg-cyber-black font-sans text-cyber-text antialiased" suppressHydrationWarning>
                 {children}
             </body>
         </html>

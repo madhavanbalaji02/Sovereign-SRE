@@ -9,48 +9,37 @@ module.exports = {
     theme: {
         extend: {
             colors: {
-                // Cyberpunk color palette
+                // Design tokens. Token names kept as `cyber-*` so existing
+                // class names keep working; values are a neutral slate base
+                // with a single blue accent and semantic status colours.
                 cyber: {
-                    black: '#0a0a0f',
-                    dark: '#0f0f1a',
-                    darker: '#1a1a2e',
-                    primary: '#00ffff',    // Cyan
-                    secondary: '#ff00ff',  // Magenta
-                    accent: '#ffff00',     // Yellow
-                    success: '#00ff88',    // Green
-                    warning: '#ffaa00',    // Orange
-                    error: '#ff3366',      // Red
-                    muted: '#4a4a6a',
+                    black: '#0A0C10',      // page background
+                    dark: '#0F1218',       // inset surfaces (code, logs, inputs)
+                    darker: '#151922',     // raised surfaces
+                    border: '#232937',     // default hairline border
+                    text: '#E6E9EF',       // primary text
+                    primary: '#6AA6FF',    // brand accent (links, focus, active)
+                    'primary-strong': '#2F6FEB', // filled primary buttons
+                    secondary: '#A78BFA',  // AI / agent accent
+                    accent: '#38BDF8',     // info / secondary data accent
+                    success: '#3DD68C',
+                    warning: '#F5B544',
+                    error: '#F2555A',
+                    muted: '#8A94A6',      // secondary text
+                    subtle: '#5C667A',     // tertiary text, icons
                 },
             },
             fontFamily: {
-                mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
-                display: ['Orbitron', 'sans-serif'],
+                sans: ['var(--font-sans)', 'Inter', 'system-ui', 'sans-serif'],
+                display: ['var(--font-sans)', 'Inter', 'system-ui', 'sans-serif'],
+                mono: ['var(--font-mono)', 'JetBrains Mono', 'ui-monospace', 'monospace'],
+            },
+            boxShadow: {
+                card: '0 1px 0 0 rgba(255,255,255,0.03) inset, 0 1px 2px rgba(0,0,0,0.4)',
+                pop: '0 8px 30px rgba(0,0,0,0.45)',
             },
             animation: {
                 'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-                'glow': 'glow 2s ease-in-out infinite alternate',
-                'scan': 'scan 8s linear infinite',
-                'flicker': 'flicker 0.15s infinite',
-            },
-            keyframes: {
-                glow: {
-                    '0%': { boxShadow: '0 0 5px #00ffff, 0 0 10px #00ffff' },
-                    '100%': { boxShadow: '0 0 10px #00ffff, 0 0 20px #00ffff, 0 0 30px #00ffff' },
-                },
-                scan: {
-                    '0%': { backgroundPosition: '0% 0%' },
-                    '100%': { backgroundPosition: '0% 100%' },
-                },
-                flicker: {
-                    '0%, 100%': { opacity: '1' },
-                    '50%': { opacity: '0.8' },
-                },
-            },
-            boxShadow: {
-                'neon-cyan': '0 0 10px #00ffff, 0 0 20px #00ffff',
-                'neon-magenta': '0 0 10px #ff00ff, 0 0 20px #ff00ff',
-                'neon-green': '0 0 10px #00ff88, 0 0 20px #00ff88',
             },
         },
     },

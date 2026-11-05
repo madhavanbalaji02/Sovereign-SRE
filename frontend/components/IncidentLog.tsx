@@ -1,11 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-    ChevronDown, ChevronRight, Clock, DollarSign, Cpu, Target,
-    AlertCircle, ExternalLink, Activity, FileCode, Terminal,
-} from 'lucide-react';
+import { ChevronRight, AlertCircle, ExternalLink, Activity, FileCode, Terminal, Check } from 'lucide-react';
 import dynamic from 'next/dynamic';
 
 const IncidentSparkline = dynamic(() => import('@/components/IncidentSparkline'), { ssr: false });
@@ -40,42 +37,18 @@ export interface Incident {
     timeseries?: SparkPoint[];
 }
 
-function StatusBadge({ status }: { status: string }) {
-    if (status === 'resolved') {
-        return (
-            <span className="px-2 py-0.5 rounded-full text-xs font-display font-bold bg-cyber-success/20 text-cyber-success border border-cyber-success/40 whitespace-nowrap">
-                RESOLVED ✓
-            </span>
-        );
-    }
-    if (status === 'failed') {
-        return (
-            <span className="px-2 py-0.5 rounded-full text-xs font-display font-bold bg-cyber-error/20 text-cyber-error border border-cyber-error/40 whitespace-nowrap">
-                FAILED
-            </span>
-        );
-    }
-    return (
-        <motion.span
-            animate={{ opacity: [1, 0.5, 1] }}
-            transition={{ repeat: Infinity, duration: 2 }}
-            className="px-2 py-0.5 rounded-full text-xs font-display font-bold bg-cyber-warning/20 text-cyber-warning border border-cyber-warning/40 whitespace-nowrap"
-        >
-            OPEN
-        </motion.span>
-    );
-}
+const STATUS_STYLE: Record<string, { label: string; cls: string }> = {
+    resolved: { label: 'Resolved', cls: 'text-cyber-success bg-cyber-success/10 ring-cyber-success/25' },
+    failed: { label: 'Failed', cls: 'text-cyber-error bg-cyber-error/10 ring-cyber-error/25' },
+    open: { label: 'Open', cls: 'text-cyber-warning bg-cyber-warning/10 ring-cyber-warning/25' },
+};
 
-function SeverityBadge({ severity }: { severity?: string }) {
-    if (!severity) return null;
-    const colors: Record<string, string> = {
-        high: 'text-cyber-error border-cyber-error/40 bg-cyber-error/10',
-        medium: 'text-cyber-warning border-cyber-warning/40 bg-cyber-warning/10',
-        low: 'text-cyber-success border-cyber-success/40 bg-cyber-success/10',
-    };
+function StatusBadge({ status }: { status: string }) {
+    const s = STATUS_STYLE[status] ?? { label: status.replace(/_/g, ' '), cls: 'text-cyber-warning bg-cyber-warning/10 ring-cyber-warning/25' };
     return (
-        <span className={`px-1.5 py-0.5 rounded text-xs font-display border uppercase ${colors[severity] ?? colors.low}`}>
-            {severity}
+        <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ring-1 whitespace-nowrap ${s.cls}`}>
+            <span className="h-1.5 w-1.5 rounded-full bg-current" />
+            {s.label}
         </span>
     );
 }
@@ -85,26 +58,24 @@ function DataSourceBadge({ source }: { source?: string }) {
     const isGaia = source === 'gaia';
     return (
         <a
-            href={isGaia
-                ? 'https://github.com/CloudWise-OpenSource/GAIA-DataSet'
-                : 'https://github.com/MicroServo/dataset'}
+            href={isGaia ? 'https://github.com/CloudWise-OpenSource/GAIA-DataSet' : 'https://github.com/MicroServo/dataset'}
             target="_blank"
             rel="noopener noreferrer"
             onClick={e => e.stopPropagation()}
-            className="flex items-center gap-1 text-xs text-cyber-muted hover:text-cyber-primary transition-colors"
+            className="inline-flex items-center gap-1 text-xs text-cyber-muted transition-colors hover:text-cyber-primary"
         >
-            <ExternalLink className="h-2.5 w-2.5" />
-            Data: {isGaia ? 'GAIA (CloudWise)' : 'AIOpsArena'}
+            {isGaia ? 'GAIA (CloudWise)' : 'AIOpsArena'}
+            <ExternalLink className="h-3 w-3" />
         </a>
     );
 }
 
-const TIMELINE_STEPS = ['Detected', 'Diagnosed', 'Fix Generated', 'Approved', 'Resolved'];
+const TIMELINE_STEPS = ['Detected', 'Diagnosed', 'Fix generated', 'Approved', 'Resolved'];
 
 function getTimelineActive(step: string, incident: Incident): boolean {
     if (step === 'Detected') return true;
     if (step === 'Diagnosed') return ['resolved', 'open', 'waiting_approval'].includes(incident.status);
-    if (step === 'Fix Generated') return ['resolved', 'waiting_approval'].includes(incident.status);
+    if (step === 'Fix generated') return ['resolved', 'waiting_approval'].includes(incident.status);
     if (step === 'Approved') return incident.status === 'resolved' && incident.approval_status === 'approved';
     if (step === 'Resolved') return incident.status === 'resolved';
     return false;
@@ -112,298 +83,244 @@ function getTimelineActive(step: string, incident: Incident): boolean {
 
 function DiffViewer({ diff }: { diff: string }) {
     return (
-        <div className="bg-cyber-black/70 rounded border border-cyber-muted/20 p-3 overflow-x-auto">
-            <pre className="text-xs font-mono">
-                {diff.split('\n').map((line, i) => (
-                    <div
-                        key={i}
-                        className={
-                            line.startsWith('+++') ? 'text-cyber-primary' :
-                                line.startsWith('---') ? 'text-cyber-error' :
-                                    line.startsWith('+') ? 'text-cyber-success' :
-                                        line.startsWith('-') ? 'text-cyber-error' :
-                                            line.startsWith('@@') ? 'text-cyber-accent' :
-                                                'text-gray-500'
-                        }
-                    >
-                        {line || ' '}
-                    </div>
-                ))}
-            </pre>
+        <pre className="max-h-80 overflow-auto rounded-lg border border-cyber-border bg-cyber-dark py-2 font-mono text-xs leading-relaxed">
+            {diff.split('\n').map((line, i) => {
+                const tone = line.startsWith('+++') || line.startsWith('---')
+                    ? 'text-cyber-text font-medium'
+                    : line.startsWith('+')
+                        ? 'text-cyber-success bg-cyber-success/[0.07]'
+                        : line.startsWith('-')
+                            ? 'text-cyber-error bg-cyber-error/[0.07]'
+                            : line.startsWith('@@')
+                                ? 'text-cyber-accent/80'
+                                : 'text-cyber-muted';
+                return <div key={i} className={`px-3 ${tone}`}>{line || ' '}</div>;
+            })}
+        </pre>
+    );
+}
+
+function Section({ title, icon, children }: { title: string; icon?: React.ReactNode; children: React.ReactNode }) {
+    return (
+        <div>
+            <h4 className="eyebrow mb-2 flex items-center gap-1.5">{icon}{title}</h4>
+            {children}
         </div>
     );
 }
 
+const isUuid = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(id);
+const ANOMALY_LABEL: Record<string, string> = {
+    cpu_anomaly: 'CPU anomaly', memory_anomaly: 'Memory anomaly', network_delay: 'Network delay',
+    pod_failure: 'Pod failure', disk_anomaly: 'Disk anomaly', io_anomaly: 'I/O anomaly',
+};
+const anomalyLabel = (t: string) => ANOMALY_LABEL[t] ?? t.replace(/_/g, ' ');
+const shortId = (id: string) => (isUuid(id) ? `RUN-${id.slice(0, 8)}` : id);
+
+type Filter = 'all' | 'open' | 'resolved' | 'failed';
+
 export default function IncidentLog({ incidents }: { incidents: Incident[] }) {
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [showRawLog, setShowRawLog] = useState<string | null>(null);
+    const [filter, setFilter] = useState<Filter>('all');
+
+    const counts = useMemo(() => {
+        const c: Record<Filter, number> = { all: incidents.length, open: 0, resolved: 0, failed: 0 };
+        for (const i of incidents) {
+            if (i.status === 'resolved') c.resolved++;
+            else if (i.status === 'failed') c.failed++;
+            else c.open++;
+        }
+        return c;
+    }, [incidents]);
+
+    const visible = incidents.filter(i =>
+        filter === 'all' ? true
+            : filter === 'open' ? !['resolved', 'failed'].includes(i.status)
+                : i.status === filter,
+    );
 
     if (incidents.length === 0) {
         return (
-            <div className="text-center py-16 text-cyber-muted">
-                <AlertCircle className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                <p className="font-display text-sm">No incidents recorded</p>
-                <p className="text-xs mt-2 opacity-60">Click ▶ Run Live Demo to see the system in action</p>
+            <div className="rounded-lg border border-dashed border-cyber-border py-14 text-center">
+                <AlertCircle className="mx-auto mb-3 h-8 w-8 text-cyber-subtle" />
+                <p className="text-sm font-medium text-cyber-text">No incidents recorded</p>
+                <p className="mt-1 text-xs text-cyber-muted">Run the live demo to see the system in action.</p>
             </div>
         );
     }
 
     return (
-        <div className="space-y-3">
-            {incidents.map((inc) => {
-                const isExpanded = expandedId === inc.incident_id;
-                const resTimeSec = inc.resolution_time_ms
-                    ? (Number(inc.resolution_time_ms) / 1000).toFixed(1)
-                    : null;
-                const confPct = inc.confidence
-                    ? `${Math.round(Number(inc.confidence) * 100)}%`
-                    : null;
-                const modelShort = inc.bedrock_model_used?.includes('haiku')
-                    ? 'Claude Haiku'
-                    : (inc.bedrock_model_used ?? '');
-                const isReal = inc.incident_id?.startsWith('REAL-');
-                const atype = inc.anomaly_type ?? 'cpu_anomaly';
-                const baseline = inc.metric_baseline ? parseFloat(inc.metric_baseline) : undefined;
-                const peak = inc.metric_peak ? parseFloat(inc.metric_peak) : undefined;
-
-                return (
-                    <motion.div
-                        key={inc.incident_id}
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className={`cyber-card border transition-all cursor-pointer ${isReal
-                            ? 'border-cyber-primary/30 hover:border-cyber-primary/60'
-                            : 'border-cyber-muted/30 hover:border-cyber-primary/50'
-                            }`}
-                        onClick={() => setExpandedId(isExpanded ? null : inc.incident_id)}
+        <div>
+            {/* Filters */}
+            <div className="mb-3 flex flex-wrap gap-1.5" role="tablist" aria-label="Filter incidents">
+                {(['all', 'open', 'resolved', 'failed'] as Filter[]).map(f => (
+                    <button
+                        key={f}
+                        role="tab"
+                        aria-selected={filter === f}
+                        onClick={() => setFilter(f)}
+                        className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium capitalize transition-colors ${filter === f
+                            ? 'bg-white/[0.08] text-cyber-text ring-1 ring-cyber-border'
+                            : 'text-cyber-muted hover:bg-white/[0.04] hover:text-cyber-text'}`}
                     >
-                        <div className="p-4">
-                            {/* Header row */}
-                            <div className="flex items-start gap-3">
-                                <div className="flex-shrink-0 pt-0.5 text-cyber-muted">
-                                    {isExpanded
-                                        ? <ChevronDown className="h-4 w-4" />
-                                        : <ChevronRight className="h-4 w-4" />
-                                    }
-                                </div>
-                                <div className="flex-grow min-w-0">
-                                    {/* ID row */}
-                                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                        {f}
+                        <span className="tabular text-cyber-subtle">{counts[f]}</span>
+                    </button>
+                ))}
+            </div>
+
+            <ul className="max-h-[44rem] divide-y divide-cyber-border overflow-y-auto rounded-lg border border-cyber-border">
+                {visible.map((inc) => {
+                    const isExpanded = expandedId === inc.incident_id;
+                    const resTimeSec = inc.resolution_time_ms ? (Number(inc.resolution_time_ms) / 1000).toFixed(0) : null;
+                    const confPct = inc.confidence ? `${Math.round(Number(inc.confidence) * 100)}%` : null;
+                    const modelShort = inc.bedrock_model_used?.includes('haiku') ? 'Claude Haiku' : (inc.bedrock_model_used ?? '');
+                    const atype = inc.anomaly_type ?? 'cpu_anomaly';
+                    const baseline = inc.metric_baseline ? parseFloat(inc.metric_baseline) : undefined;
+                    const peak = inc.metric_peak ? parseFloat(inc.metric_peak) : undefined;
+                    const cost = inc.cost_usd && Number(inc.cost_usd) > 0 ? `$${Number(inc.cost_usd).toFixed(4)}` : null;
+
+                    return (
+                        <li key={inc.incident_id} className={isExpanded ? 'bg-white/[0.02]' : ''}>
+                            <button
+                                type="button"
+                                aria-expanded={isExpanded}
+                                onClick={() => setExpandedId(isExpanded ? null : inc.incident_id)}
+                                className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-white/[0.03]"
+                            >
+                                <ChevronRight className={`mt-0.5 h-4 w-4 flex-shrink-0 text-cyber-subtle transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
                                         <StatusBadge status={inc.status} />
-                                        <span className="font-display text-xs text-cyber-primary font-bold">{inc.incident_id}</span>
-                                        <span className="font-mono text-xs text-cyber-accent">{atype.replace(/_/g, ' ')}</span>
-                                        {inc.severity && <SeverityBadge severity={inc.severity} />}
+                                        <span className="font-mono text-xs font-medium text-cyber-text" title={inc.incident_id}>{shortId(inc.incident_id)}</span>
+                                        <span className="text-xs text-cyber-muted">{anomalyLabel(atype)}</span>
+                                        {inc.service && <span className="font-mono text-xs text-cyber-muted">· {inc.service}</span>}
                                     </div>
-
-                                    {/* Service · duration · confidence · cost */}
-                                    <div className="flex items-center gap-3 flex-wrap mb-2 text-xs text-cyber-muted">
-                                        {inc.service && (
-                                            <span className="font-mono text-cyber-secondary">{inc.service}</span>
-                                        )}
-                                        {inc.duration_seconds && (
-                                            <span>{inc.duration_seconds}s duration</span>
-                                        )}
-                                        {confPct && (
-                                            <span className="text-cyber-success font-bold">confidence {confPct}</span>
-                                        )}
-                                        {inc.cost_usd && Number(inc.cost_usd) > 0 && (
-                                            <span className="text-cyber-warning">${inc.cost_usd}</span>
-                                        )}
-                                    </div>
-
-                                    {/* Root cause preview */}
-                                    <p className="text-sm text-gray-300 truncate">
-                                        {(inc.root_cause ?? '').slice(0, 110)}{(inc.root_cause ?? '').length > 110 ? '…' : ''}
+                                    <p className={`mt-1.5 line-clamp-1 text-sm ${inc.root_cause ? 'text-cyber-text/90' : 'italic text-cyber-subtle'}`}>
+                                        {inc.root_cause || 'No root cause recorded for this pipeline run.'}
                                     </p>
-
-                                    {/* Bottom meta row */}
-                                    <div className="flex items-center justify-between mt-2 flex-wrap gap-2">
-                                        <div className="flex items-center gap-3 flex-wrap">
-                                            {resTimeSec && (
-                                                <span className="flex items-center gap-1 text-xs text-cyber-muted">
-                                                    <Clock className="h-3 w-3" />
-                                                    <span className="text-cyber-primary font-bold">{resTimeSec}s</span>
-                                                </span>
-                                            )}
-                                            {peak != null && (
-                                                <span className="flex items-center gap-1 text-xs text-cyber-muted">
-                                                    <Activity className="h-3 w-3" />
-                                                    peak <span className="text-cyber-error font-bold ml-1">{peak.toFixed(1)}%</span>
-                                                </span>
-                                            )}
-                                            {modelShort && (
-                                                <span className="flex items-center gap-1 text-xs text-cyber-muted">
-                                                    <Cpu className="h-3 w-3" />
-                                                    <span className="text-cyber-secondary">{modelShort}</span>
-                                                </span>
-                                            )}
-                                        </div>
-                                        <DataSourceBadge source={inc.source_dataset} />
-                                    </div>
                                 </div>
-                            </div>
-                        </div>
+                                <div className="hidden flex-shrink-0 flex-col items-end gap-1 text-xs tabular sm:flex">
+                                    {confPct && <span className="text-cyber-text">{confPct} <span className="text-cyber-subtle">conf.</span></span>}
+                                    <span className="text-cyber-muted">
+                                        {[resTimeSec && `${resTimeSec}s`, cost].filter(Boolean).join(' · ') || '—'}
+                                    </span>
+                                </div>
+                            </button>
 
-                        {/* Expanded section */}
-                        <AnimatePresence>
-                            {isExpanded && (
-                                <motion.div
-                                    initial={{ height: 0, opacity: 0 }}
-                                    animate={{ height: 'auto', opacity: 1 }}
-                                    exit={{ height: 0, opacity: 0 }}
-                                    className="overflow-hidden"
-                                >
-                                    <div className="px-4 pb-5 border-t border-cyber-muted/20 pt-4 space-y-5">
+                            <AnimatePresence initial={false}>
+                                {isExpanded && (
+                                    <motion.div
+                                        initial={{ height: 0, opacity: 0 }}
+                                        animate={{ height: 'auto', opacity: 1 }}
+                                        exit={{ height: 0, opacity: 0 }}
+                                        transition={{ duration: 0.2 }}
+                                        className="overflow-hidden"
+                                    >
+                                        <div className="space-y-5 px-4 pb-5 pl-11 pt-1">
+                                            {/* Key facts */}
+                                            <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-cyber-border bg-cyber-border sm:grid-cols-4">
+                                                {[
+                                                    ['Peak', peak != null ? `${peak.toFixed(1)}%` : '—'],
+                                                    ['Duration', inc.duration_seconds ? `${inc.duration_seconds}s` : '—'],
+                                                    ['Resolution', resTimeSec ? `${resTimeSec}s` : '—'],
+                                                    ['Model', modelShort || '—'],
+                                                ].map(([k, v]) => (
+                                                    <div key={k} className="bg-cyber-dark px-3 py-2">
+                                                        <dt className="text-[11px] text-cyber-muted">{k}</dt>
+                                                        <dd className="mt-0.5 truncate text-sm font-medium text-cyber-text tabular">{v}</dd>
+                                                    </div>
+                                                ))}
+                                            </dl>
 
-                                        {/* Sparkline */}
-                                        {inc.timeseries && inc.timeseries.length > 0 && (
-                                            <div>
-                                                <h4 className="font-display text-xs text-cyber-primary mb-2 tracking-widest flex items-center gap-2">
-                                                    <Activity className="h-3.5 w-3.5" />
-                                                    METRIC TIME SERIES
-                                                    <span className="text-cyber-muted font-mono normal-case tracking-normal">
-                                                        (baseline {baseline?.toFixed(1)}% → peak {peak?.toFixed(1)}%)
-                                                    </span>
-                                                </h4>
-                                                <div
-                                                    className="rounded border border-cyber-muted/10 bg-cyber-black/40 p-2"
-                                                    onClick={e => e.stopPropagation()}
-                                                >
-                                                    <IncidentSparkline
-                                                        data={inc.timeseries}
-                                                        anomalyType={atype}
-                                                        baseline={baseline}
-                                                        peak={peak}
-                                                    />
-                                                    <p className="text-xs text-cyber-muted text-center mt-1">
-                                                        X-axis: relative time (min) · Red region = anomaly window · ✓ = recovery
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        )}
+                                            {inc.timeseries && inc.timeseries.length > 0 && (
+                                                <Section title="Metric time series" icon={<Activity className="h-3.5 w-3.5" />}>
+                                                    <div className="rounded-lg border border-cyber-border bg-cyber-dark p-2">
+                                                        <IncidentSparkline data={inc.timeseries} anomalyType={atype} baseline={baseline} peak={peak} />
+                                                        <p className="mt-1 text-center text-[11px] text-cyber-muted">
+                                                            Relative time (min) · shaded region is the anomaly window
+                                                            {baseline != null && peak != null && ` · baseline ${baseline.toFixed(1)}% → peak ${peak.toFixed(1)}%`}
+                                                        </p>
+                                                    </div>
+                                                </Section>
+                                            )}
 
-                                        {/* Root cause */}
-                                        <div>
-                                            <h4 className="font-display text-xs text-cyber-secondary mb-1.5 tracking-widest">ROOT CAUSE</h4>
-                                            <p className="text-sm text-gray-300 leading-relaxed">{inc.root_cause}</p>
-                                        </div>
+                                            {inc.root_cause && (
+                                                <Section title="Root cause">
+                                                    <p className="text-sm leading-relaxed text-cyber-text/90">{inc.root_cause}</p>
+                                                </Section>
+                                            )}
 
-                                        {/* Proposed fix */}
-                                        {inc.proposed_fix && (
-                                            <div>
-                                                <h4 className="font-display text-xs text-cyber-success mb-1.5 tracking-widest">PROPOSED FIX</h4>
-                                                <p className="text-sm text-gray-300 leading-relaxed">{inc.proposed_fix}</p>
-                                            </div>
-                                        )}
+                                            {inc.proposed_fix && (
+                                                <Section title="Proposed fix">
+                                                    <ul className="list-disc space-y-1 pl-4 text-sm leading-relaxed text-cyber-text/90 marker:text-cyber-subtle">
+                                                        {inc.proposed_fix.split(/;\s+/).map((step, i) => <li key={i}>{step}</li>)}
+                                                    </ul>
+                                                </Section>
+                                            )}
 
-                                        {/* Code diff */}
-                                        {inc.diff_preview && (
-                                            <div>
-                                                <h4 className="font-display text-xs text-cyber-accent mb-1.5 tracking-widest flex items-center gap-2">
-                                                    <FileCode className="h-3.5 w-3.5" />
-                                                    CODE DIFF
-                                                </h4>
-                                                <DiffViewer diff={inc.diff_preview} />
-                                            </div>
-                                        )}
+                                            {inc.diff_preview && (
+                                                <Section title="Code diff" icon={<FileCode className="h-3.5 w-3.5" />}>
+                                                    <DiffViewer diff={inc.diff_preview} />
+                                                </Section>
+                                            )}
 
-                                        {/* Raw log line (collapsible) */}
-                                        {inc.raw_log_line && (
-                                            <div>
-                                                <button
-                                                    className="flex items-center gap-2 font-display text-xs text-cyber-muted hover:text-cyber-primary transition-colors tracking-widest"
-                                                    onClick={e => {
-                                                        e.stopPropagation();
-                                                        setShowRawLog(showRawLog === inc.incident_id ? null : inc.incident_id);
-                                                    }}
-                                                >
-                                                    <Terminal className="h-3.5 w-3.5" />
-                                                    RAW LOG LINE
-                                                    {showRawLog === inc.incident_id
-                                                        ? <ChevronDown className="h-3 w-3" />
-                                                        : <ChevronRight className="h-3 w-3" />}
-                                                </button>
-                                                <AnimatePresence>
-                                                    {showRawLog === inc.incident_id && (
-                                                        <motion.div
-                                                            initial={{ height: 0, opacity: 0 }}
-                                                            animate={{ height: 'auto', opacity: 1 }}
-                                                            exit={{ height: 0, opacity: 0 }}
-                                                            className="overflow-hidden"
-                                                        >
-                                                            <pre className="mt-2 text-xs font-mono text-gray-400 bg-cyber-black/70 rounded border border-cyber-muted/20 p-3 whitespace-pre-wrap break-all">
-                                                                {inc.raw_log_line}
-                                                            </pre>
-                                                        </motion.div>
-                                                    )}
-                                                </AnimatePresence>
-                                            </div>
-                                        )}
-
-                                        {/* Timeline */}
-                                        <div>
-                                            <h4 className="font-display text-xs text-cyber-primary mb-2 tracking-widest">TIMELINE</h4>
-                                            <div className="flex items-center gap-1 overflow-x-auto pb-1">
-                                                {TIMELINE_STEPS.map((step, i) => {
-                                                    const active = getTimelineActive(step, inc);
-                                                    return (
-                                                        <div key={step} className="flex items-center gap-1 flex-shrink-0">
-                                                            {i > 0 && (
-                                                                <div className={`w-6 h-px ${active ? 'bg-cyber-success' : 'bg-cyber-muted/40'}`} />
-                                                            )}
-                                                            <span className={`text-xs px-2 py-0.5 rounded border whitespace-nowrap ${active
-                                                                ? 'text-cyber-success border-cyber-success/40 bg-cyber-success/10'
-                                                                : 'text-cyber-muted border-cyber-muted/20'
-                                                                }`}>
-                                                                {step}
-                                                            </span>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-
-                                        {/* Model / tokens / cost */}
-                                        {inc.bedrock_model_used && (
-                                            <div className="flex gap-6 text-xs flex-wrap">
+                                            {inc.raw_log_line && (
                                                 <div>
-                                                    <span className="text-cyber-muted">Model: </span>
-                                                    <span className="text-cyber-secondary font-mono">{inc.bedrock_model_used}</span>
+                                                    <button
+                                                        className="eyebrow flex items-center gap-1.5 transition-colors hover:text-cyber-text"
+                                                        onClick={() => setShowRawLog(showRawLog === inc.incident_id ? null : inc.incident_id)}
+                                                    >
+                                                        <Terminal className="h-3.5 w-3.5" />
+                                                        Raw log line
+                                                        <ChevronRight className={`h-3 w-3 transition-transform ${showRawLog === inc.incident_id ? 'rotate-90' : ''}`} />
+                                                    </button>
+                                                    {showRawLog === inc.incident_id && (
+                                                        <pre className="mt-2 whitespace-pre-wrap break-all rounded-lg border border-cyber-border bg-cyber-dark p-3 font-mono text-xs text-cyber-muted">
+                                                            {inc.raw_log_line}
+                                                        </pre>
+                                                    )}
                                                 </div>
-                                                {inc.tokens_used && Number(inc.tokens_used) > 0 && (
-                                                    <div>
-                                                        <span className="text-cyber-muted">Tokens: </span>
-                                                        <span className="text-cyber-primary font-bold">{inc.tokens_used}</span>
-                                                    </div>
-                                                )}
-                                                {inc.cost_usd && Number(inc.cost_usd) > 0 && (
-                                                    <div>
-                                                        <span className="text-cyber-muted">Cost: </span>
-                                                        <span className="text-cyber-warning font-bold">${inc.cost_usd}</span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
+                                            )}
 
-                                        {/* Data source attribution */}
-                                        {inc.source_dataset && (
-                                            <div className="flex items-center gap-2 pt-1 border-t border-cyber-muted/10">
-                                                <span className="text-xs text-cyber-muted">Source:</span>
-                                                <DataSourceBadge source={inc.source_dataset} />
-                                                {inc.affected_containers && (
-                                                    <span className="text-xs text-cyber-muted">
-                                                        · Containers: <span className="text-cyber-secondary font-mono">{inc.affected_containers}</span>
-                                                    </span>
-                                                )}
+                                            <Section title="Timeline">
+                                                <ol className="flex flex-wrap items-center gap-1">
+                                                    {TIMELINE_STEPS.map((step, i) => {
+                                                        const active = getTimelineActive(step, inc);
+                                                        return (
+                                                            <li key={step} className="flex items-center gap-1">
+                                                                {i > 0 && <span className={`h-px w-4 ${active ? 'bg-cyber-success/50' : 'bg-cyber-border'}`} />}
+                                                                <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs ring-1 ${active
+                                                                    ? 'text-cyber-success bg-cyber-success/10 ring-cyber-success/25'
+                                                                    : 'text-cyber-subtle ring-cyber-border'}`}>
+                                                                    {active && <Check className="h-3 w-3" />}
+                                                                    {step}
+                                                                </span>
+                                                            </li>
+                                                        );
+                                                    })}
+                                                </ol>
+                                            </Section>
+
+                                            <div className="flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-cyber-border pt-3 text-xs text-cyber-muted">
+                                                {inc.bedrock_model_used && <span>Model <span className="font-mono text-cyber-text">{inc.bedrock_model_used}</span></span>}
+                                                {inc.tokens_used && Number(inc.tokens_used) > 0 && <span>Tokens <span className="text-cyber-text tabular">{inc.tokens_used}</span></span>}
+                                                {cost && <span>Cost <span className="text-cyber-text tabular">{cost}</span></span>}
+                                                {inc.affected_containers && <span>Containers <span className="font-mono text-cyber-text">{inc.affected_containers}</span></span>}
+                                                {inc.source_dataset && <span className="flex items-center gap-1.5">Source <DataSourceBadge source={inc.source_dataset} /></span>}
                                             </div>
-                                        )}
-                                    </div>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </motion.div>
-                );
-            })}
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </li>
+                    );
+                })}
+                {visible.length === 0 && (
+                    <li className="px-4 py-10 text-center text-sm text-cyber-muted">No {filter} incidents.</li>
+                )}
+            </ul>
         </div>
     );
 }
