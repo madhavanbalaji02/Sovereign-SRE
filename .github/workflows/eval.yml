@@ -1,32 +1,47 @@
-name: LLM Eval on Prompt Change
+name: LLM Eval
 
+# Re-scores the root-cause pipeline against ground truth whenever agent
+# prompts / LLM code or the eval set change. Calls Bedrock (a few cents per run).
 on:
   push:
-    paths:
-      - 'backend/agents/prompts/**'
-      - 'evaluation/ground_truth.jsonl'
     branches: [main]
+    paths:
+      - 'backend/agents/**'
+      - 'backend/llm/**'
+      - 'evaluation/**.py'
+      - 'evaluation/ground_truth.jsonl'
   pull_request:
     paths:
-      - 'backend/agents/prompts/**'
+      - 'backend/agents/**'
+      - 'backend/llm/**'
+      - 'evaluation/**.py'
       - 'evaluation/ground_truth.jsonl'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
 
 jobs:
   eval:
+    name: Eval (20 samples)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PIP_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: pip
+          cache-dependency-path: evaluation/requirements.txt
 
       - name: Install eval dependencies
-        run: |
-          pip install -r evaluation/requirements.txt
+        run: pip install -r evaluation/requirements.txt
 
-      - name: Run eval (20 samples for CI speed)
+      - name: Run eval
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -34,7 +49,7 @@ jobs:
           S3_BUCKET: sovereign-sre-artifacts-574772738370
         run: |
           python evaluation/eval_runner.py \
-            --prompt-version $(git rev-parse --short HEAD) \
+            --prompt-version "$(git rev-parse --short HEAD)" \
             --n-samples 20 \
             --fail-below 0.75
 
@@ -44,39 +59,42 @@ jobs:
         with:
           name: eval-report
           path: evaluation/last_report.json
+          if-no-files-found: warn
 
       - name: Comment eval results on PR
-        if: github.event_name == 'pull_request'
+        if: always() && github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |
-            const fs = require('fs')
-            let report
+            const fs = require('fs');
+            let report;
             try {
-              report = JSON.parse(fs.readFileSync('./evaluation/last_report.json', 'utf8'))
-            } catch(e) {
-              console.log('No report found')
-              return
+              report = JSON.parse(fs.readFileSync('./evaluation/last_report.json', 'utf8'));
+            } catch (e) {
+              core.warning('No eval report found');
+              return;
             }
-            const m = report.metrics
-            const p = report.performance
-            const pass = m.composite_score >= 0.75
-            const body = `## 🧪 LLM Eval Results — \`${report.prompt_version}\`
-
-| Metric | Score |
-|--------|-------|
-| Root Cause Accuracy | ${m.root_cause_accuracy} |
-| RAGAS Faithfulness | ${m.ragas_faithfulness} |
-| Semantic Similarity | ${m.semantic_similarity} |
-| File Attribution | ${m.file_attribution} |
-| **Composite** | **${m.composite_score}** |
-
-**Performance:** p50=${p.p50_latency_ms}ms · p95=${p.p95_latency_ms}ms · cost=$${p.total_cost_usd}
-
-**Threshold:** 0.75 · **Status:** ${pass ? '✅ PASS' : '❌ FAIL — prompt change degraded accuracy'}`
+            const m = report.metrics;
+            const p = report.performance;
+            const pass = m.composite_score >= 0.75;
+            const body = [
+              `## LLM eval: \`${report.prompt_version}\``,
+              '',
+              '| Metric | Score |',
+              '|--------|-------|',
+              `| Root cause accuracy | ${m.root_cause_accuracy} |`,
+              `| RAGAS faithfulness | ${m.ragas_faithfulness} |`,
+              `| Semantic similarity | ${m.semantic_similarity} |`,
+              `| File attribution | ${m.file_attribution} |`,
+              `| **Composite** | **${m.composite_score}** |`,
+              '',
+              `**Performance:** p50 ${p.p50_latency_ms} ms · p95 ${p.p95_latency_ms} ms · cost $${p.total_cost_usd}`,
+              '',
+              `**Threshold:** 0.75 · **Status:** ${pass ? 'PASS' : 'FAIL (prompt change degraded accuracy)'}`,
+            ].join('\n');
             await github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body
-            })
+              body,
+            });
